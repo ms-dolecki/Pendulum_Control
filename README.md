@@ -5,10 +5,13 @@ Create virtual environment, install dependencies with pip, run command:
 
 ```python3 pendulum_sim2.py --config_file pendulum_config2.txt```
 
+Sample Run:
+
+https://github.com/ms-dolecki/Pendulum_Control/assets/151703986/e428ca90-0092-4d97-94ff-31bbe50f1d74
+
 
 Now old:
 Triple pendulum:
-
 
 https://github.com/ms-dolecki/Pendulum_Control/assets/151703986/9c4deff3-46bb-4c95-b387-f9286c606d5f
 
