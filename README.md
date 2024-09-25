@@ -24,4 +24,8 @@ https://github.com/ms-dolecki/Pendulum_Control/assets/151703986/855eff2a-2c3b-48
 
 
 
+Real-life build:
+
+![Pendulum_Image](https://github.com/user-attachments/assets/dbdcfa0d-4e72-407d-93e3-0892e035833d)
+
 
