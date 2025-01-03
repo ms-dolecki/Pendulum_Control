@@ -90,7 +90,10 @@ class Pendulum_Variables:
         mouse_x = float(QCursor.pos().x())
         self.mouse_x_convert = self.x_axis_left+(mouse_x-self.window_x)*self.x_axis_range/self.x_pixel_range
         #print(mouse_x, self.mouse_x_convert)
-        a_base = 2000*(self.mouse_x_convert - self.x) - 40*self.v
+        #a_base = 500*(self.mouse_x_convert - self.x) - 40*self.v
+        #a_base = 3*(0.5 - self.x)
+        a_base = 1*(80*(0.09*(self.x+0.8*self.v) + 3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318) - 30*self.angle_dots_vector[0][0])
+        print(a_base)
         self.x += self.v*t+0.5*a_base*(t**2)
         self.v += a_base*t
         self.horizontal_acceleration = -a_base
@@ -114,7 +117,7 @@ class Pendulum_Variables:
         self.angle_dots_vector += 0.5*(angle_dotdots_vector1+angle_dotdots_vector2)*t
         
         self.time_0 = time_1
-        time.sleep(0.001)
+        time.sleep(0.0000001)
 
         
         

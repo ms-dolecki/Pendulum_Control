@@ -38,17 +38,18 @@ class Pendulum_Plotter:
         #self.win.setRowHeight(1,100)
         timer = QtCore.QTimer()
         timer.timeout.connect(self.update_plot)
-        timer.start(0.0001)
+        timer.start(1)
         self.start = True
         pg.exec()
 
     def reset(self):
         print("reset")
         self.pendulum_variables.running = False
+        self.pendulum_variables.x = 0
         self.pendulum_variables.angles_vector = deepcopy(self.pendulum_variables.angles_vector_0)
         self.pendulum_variables.angle_dots_vector = deepcopy(self.pendulum_variables.angle_dots_vector_0)
         self.pendulum_variables.time_0 = time.time()
-        self.pendulum_variables.old_time = time.time()
+        #self.pendulum_variables.old_time = time.time()
         self.pendulum_variables.running = True
     
     def update_plot(self):

@@ -49,7 +49,7 @@ def update_pendulum_variables(pendulum_vars):
 # outputs pendulum data
 def output_data(data_out):
     while True:
-        data_out.output()
+        #data_out.output()
         time.sleep(0.002)
         
 

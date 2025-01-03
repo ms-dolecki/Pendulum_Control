@@ -36,11 +36,12 @@ class Data_Output:
                 self.ser.write(bytes(message+'\n','utf-8'))
             except:
                 self.connected = False
-                print("failed to connect")
+                #print("failed to connect")
         else:
             try:
                 self.ser = serial.Serial(self.port_name, 115200)
                 self.connected = True
             except:
-                print("failed to connect")
+                k = 1
+                #print("failed to connect")
 
