@@ -47,7 +47,7 @@ def T_vector(n, masses_v, angles_v, external_acceleration_v):
     return T
                           
 class Pendulum_Variables:
-    def __init__(self, n, masses_v, radii_v, angles_v, angle_dots_v):
+    def __init__(self, n, masses_v, radii_v, angles_v, angle_dots_v, policy_type, policy_v):
         # pendulum config
         self.n = n
         self.masses_vector_0 = masses_v
@@ -68,12 +68,22 @@ class Pendulum_Variables:
         # base motion
         self.x = 0
         self.v = 0
+        self.a_base = 0
+        self.policy_type = policy_type
+        self.policy_vector = policy_v
+        print(policy_v)
+
         # pendulum acceleration due to base motion
         self.horizontal_acceleration = 0
         # running
         self.running = False
+
+        self.data_file = open('data.txt', 'w')
+        self.data_file.write(str(0)+","+str(self.x)+","+str(self.v)+","+str((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
         # time
         self.time_0 = time.time()
+        self.initial_time = time.time()
+        self.sample_time = time.time()
     
     def calculate_KLT(self, angles_v, external_acceleration_v):
         K = K_matrix(self.n, self.masses_vector, self.radii_vector, angles_v)
@@ -81,7 +91,10 @@ class Pendulum_Variables:
         Linv = inv(L)
         T = T_vector(self.n, self.masses_vector, angles_v, external_acceleration_v)
         return K, Linv, T
-        
+    
+    def open_file(self,file_name):
+        self.data_file = open(file_name, 'w')
+
     def update(self):
         time_1 = time.time()
         t = time_1 - self.time_0
@@ -92,11 +105,41 @@ class Pendulum_Variables:
         #print(mouse_x, self.mouse_x_convert)
         #a_base = 500*(self.mouse_x_convert - self.x) - 40*self.v
         #a_base = 3*(0.5 - self.x)
-        a_base = 1*(80*(0.09*(self.x+0.8*self.v) + 3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318) - 30*self.angle_dots_vector[0][0])
-        print(a_base)
-        self.x += self.v*t+0.5*a_base*(t**2)
-        self.v += a_base*t
-        self.horizontal_acceleration = -a_base
+        #self.a_base = 1*(80*(0.09*(self.x+0.8*self.v) + 3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318) - 30*self.angle_dots_vector[0][0])
+        #print(str(self.policy_type)+"pid")
+        #print(str(self.policy_type) == "pid")
+        #print(self.policy_vector)
+        #print("yo2")
+        #print(self.policy_vector[4])
+        if str(self.policy_type) == "proportional":
+            #print("in")
+            #self.a_base = self.policy_vector[0]*(self.policy_vector[1]*(self.policy_vector[2]*(self.x+self.policy_vector[3]*self.v) + 3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318) - self.policy_vector[4]*self.angle_dots_vector[0][0])
+            #print(self.policy_vector[1])
+            #self.a_base = self.policy_vector[0]*(self.policy_vector[1]*(0.09*(self.x+0.8*self.v) + 3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318) - 30*self.angle_dots_vector[0][0])
+            #a = self.policy_vector[0]*self.policy_vector[1]*self.policy_vector[2]
+            #b = self.policy_vector[0]*self.policy_vector[1]*self.policy_vector[2]*self.policy_vector[3]
+            #c = self.policy_vector[0]*self.policy_vector[1]
+            #d = -self.policy_vector[0]*self.policy_vector[4]
+            #print("a")
+            #print(a)
+            #print("b")
+            #print(b)
+            #print("c")
+            #print(c)
+            #print("d")
+            #print(d)
+            if time.time() - self.sample_time > 0.1: 
+                a = self.policy_vector[0]
+                b = self.policy_vector[1]
+                c = self.policy_vector[2]
+                d = self.policy_vector[3]
+                self.a_base = a*self.x+b*self.v+c*(3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318)+d*self.angle_dots_vector[0][0]
+                self.data_file.write(str(time.time()-self.sample_time)+","+str(self.x)+","+str(self.v)+","+str((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
+                self.sample_time = time.time()
+        #print(a_base)
+        self.x += self.v*t+0.5*self.a_base*(t**2)
+        self.v += self.a_base*t
+        self.horizontal_acceleration = -self.a_base
         
         # set external acceleration as if base were stationary
         self.external_acceleration_v = [self.horizontal_acceleration, -9.81]
@@ -117,7 +160,13 @@ class Pendulum_Variables:
         self.angle_dots_vector += 0.5*(angle_dotdots_vector1+angle_dotdots_vector2)*t
         
         self.time_0 = time_1
-        time.sleep(0.0000001)
+        #print(time_1 - self.initial_time)
+        #print("time_1")
+        #print(time_1)
+        #print("self.initial_time")
+        #print(self.initial_time)
+        if time_1 - self.initial_time > 10:
+            self.running = False
+            self.data_file.close()
+        time.sleep(0.00001)
 
-        
-        

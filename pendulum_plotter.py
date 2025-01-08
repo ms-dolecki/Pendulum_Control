@@ -43,12 +43,18 @@ class Pendulum_Plotter:
         pg.exec()
 
     def reset(self):
-        print("reset")
+        
         self.pendulum_variables.running = False
-        self.pendulum_variables.x = 0
+        self.pendulum_variables.x = 1
         self.pendulum_variables.angles_vector = deepcopy(self.pendulum_variables.angles_vector_0)
         self.pendulum_variables.angle_dots_vector = deepcopy(self.pendulum_variables.angle_dots_vector_0)
         self.pendulum_variables.time_0 = time.time()
+        self.pendulum_variables.initial_time = time.time()
+        self.pendulum_variables.sample_time = time.time()
+        self.pendulum_variables.open_file('data.txt')
+        print("reset")
+        #print("self.pendulum_variables.initial_time")
+        #print(self.pendulum_variables.initial_time)
         #self.pendulum_variables.old_time = time.time()
         self.pendulum_variables.running = True
     
