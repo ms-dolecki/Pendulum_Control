@@ -47,7 +47,7 @@ def T_vector(n, masses_v, angles_v, external_acceleration_v):
     return T
                           
 class Pendulum_Variables:
-    def __init__(self, n, masses_v, radii_v, angles_v, angle_dots_v, policy_type, policy_v):
+    def __init__(self, n, masses_v, radii_v, angles_v, angle_dots_v, policy_type, policy_v,policy_file):
         # pendulum config
         self.n = n
         self.masses_vector_0 = masses_v
@@ -71,6 +71,7 @@ class Pendulum_Variables:
         self.a_base = 0
         self.policy_type = policy_type
         self.policy_vector = policy_v
+        self.policy_file = policy_file
         print(policy_v)
 
         # pendulum acceleration due to base motion
@@ -85,6 +86,22 @@ class Pendulum_Variables:
         self.initial_time = time.time()
         self.sample_time = time.time()
     
+    def load_policy(self):
+        policy_config = open(self.policy_file, "r")
+        policy = []
+        policy_type = ""
+        for ln in policy_config:
+            ln.strip()
+            if ln[0] != "#":
+                ln = ln.strip("\n")
+                policy.append(float(ln.strip()))
+            else:
+                ln = ln.strip("\n")
+                policy_type = str(ln[1:])
+        policy_config.close()
+        self.policy_type = policy_type
+        self.policy_vector = numpy.array(policy)
+
     def calculate_KLT(self, angles_v, external_acceleration_v):
         K = K_matrix(self.n, self.masses_vector, self.radii_vector, angles_v)
         L = L_matrix(self.n, self.masses_vector, self.radii_vector, angles_v)
@@ -137,6 +154,9 @@ class Pendulum_Variables:
                 self.data_file.write(str(time.time()-self.sample_time)+","+str(self.x)+","+str(self.v)+","+str((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
                 self.sample_time = time.time()
         #print(a_base)
+        if abs(self.x) > 3:
+            self.a_base = 0
+            self.v = 0
         self.x += self.v*t+0.5*self.a_base*(t**2)
         self.v += self.a_base*t
         self.horizontal_acceleration = -self.a_base

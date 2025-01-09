@@ -46,7 +46,7 @@ for ln in policy_config:
     else:
         ln = ln.strip("\n")
         policy_type = str(ln[1:])
-
+policy_config.close()
 print(policy)
         
 masses_vector_0 = numpy.array(masses)
@@ -73,7 +73,7 @@ def output_data(data_out):
         
 
 # initialize pendulum variables and update in separate thread
-pendulum_variables = Pendulum_Variables(len(masses_vector_0), deepcopy(masses_vector_0), deepcopy(radii_vector_0), deepcopy(angles_vector_0), deepcopy(angle_dots_vector_0), policy_type, deepcopy(policy_0))
+pendulum_variables = Pendulum_Variables(len(masses_vector_0), deepcopy(masses_vector_0), deepcopy(radii_vector_0), deepcopy(angles_vector_0), deepcopy(angle_dots_vector_0), policy_type, deepcopy(policy_0),policy_file)
 t1 = threading.Thread(target=update_pendulum_variables, args=[pendulum_variables])
 t1.start()
 

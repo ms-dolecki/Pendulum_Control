@@ -4,6 +4,9 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore
 from PyQt5.QtWidgets import *
 from copy import deepcopy
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
 
 
 class Pendulum_Plotter:
@@ -27,6 +30,11 @@ class Pendulum_Plotter:
         self.grid.addWidget(self.plot_win, 0,0)
         self.reset_button = QPushButton("reset")
         self.reset_button.clicked.connect(self.reset)
+        path_to_watch = "test.txt"  # Replace with your file or directory path
+        event_handler = self.Watcher(self)
+        observer = Observer()
+        observer.schedule(event_handler, path=path_to_watch, recursive=False)  # Set recursive=True to monitor subdirectories
+        observer.start()
         self.grid.addWidget(self.reset_button,1,0)
         self.win.setLayout(self.grid)
         #self.plot.hideAxis("left")
@@ -42,8 +50,15 @@ class Pendulum_Plotter:
         self.start = True
         pg.exec()
 
+    class Watcher(FileSystemEventHandler):
+        def __init__(self,pendulum_plotter):
+            self.pendulum_plotter = pendulum_plotter
+        def on_modified(self, event):
+            if event.is_directory:
+                return
+            self.pendulum_plotter.reset()
+
     def reset(self):
-        
         self.pendulum_variables.running = False
         self.pendulum_variables.x = 1
         self.pendulum_variables.angles_vector = deepcopy(self.pendulum_variables.angles_vector_0)
@@ -52,6 +67,7 @@ class Pendulum_Plotter:
         self.pendulum_variables.initial_time = time.time()
         self.pendulum_variables.sample_time = time.time()
         self.pendulum_variables.open_file('data.txt')
+        self.pendulum_variables.load_policy()
         print("reset")
         #print("self.pendulum_variables.initial_time")
         #print(self.pendulum_variables.initial_time)
