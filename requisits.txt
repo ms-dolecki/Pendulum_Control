@@ -1,0 +1,8 @@
+sudo apt-get update
+sudo apt-get upgrade
+pip3 install numpy
+sudo apt-get install vim -y
+sudo apt-get install openssh-client openssh-server -y
+sudo cp sshd_config /etc/ssh/sshd_config
+sudo service ssh restart
+sudo passwd codespace -password
