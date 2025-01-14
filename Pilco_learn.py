@@ -1,6 +1,9 @@
 import numpy as np
+import gpflow
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
+from sklearn.preprocessing import StandardScaler
+import time
 
 def load_data(data_file):
     data = open(data_file, "r")
@@ -20,33 +23,135 @@ def load_data(data_file):
     data.close()
     return input_data[:-1],output_data[1:]
 
-input_data, output_data = load_data("data.txt")
-# Set up the GP kernel (RBF kernel + constant kernel)
-kernel = C(1.0, (1e-4, 1e1)) * RBF(1.0, (1e-4, 1e1))
-# Initialize GP regressor
-gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10, alpha=1e-2)
-# Fit the GP model to the data
-gp.fit(input_data, output_data)
-a,b,c,d = 7.2,5.76,80,-30
-time_step = 0.1
-total_time = 10
-delta_T = np.array([time_step])
-current_state = np.array([1.0,0.0,0.02123817989101573,-0.009558798511813068])
-#current_state = current_state.reshape(-1,1)
-action = np.array([a*current_state[0]+b*current_state[1]+c*current_state[2]+d*current_state[3]])
-print(np.concatenate((delta_T,current_state,action), axis=0))
-num_steps = int(total_time/time_step)
-predicted_states = []
-future_state = current_state
-trajectory = []
-for _ in range(num_steps):
-    future_state = gp.predict([np.concatenate((delta_T,future_state,action), axis=0)])[0]
+def evaluate_policy(a,b,c,d,scaler,gp):
+    time_step = 0.1
+    total_time = 10
+    delta_T = np.array([time_step])
+    current_state = np.array([1.0,0.0,0.02123817989101573,-0.009558798511813068])
+    #current_state = current_state.reshape(-1,1)
+    action = np.array([a*current_state[0]+b*current_state[1]+c*current_state[2]+d*current_state[3]])
+    #print(np.concatenate((delta_T,current_state,action), axis=0))
+    num_steps = int(total_time/time_step)
+    predicted_states = []
+    future_state = current_state
+    trajectory = []
+    output_data_file = "Pilco_trajectory.txt"
+    output_data = open(output_data_file, "w")
+    for _ in range(num_steps):
+        output_data.write(str(time_step)+","+str(float(future_state[0]))+","+str(float(future_state[1]))+","+str(float(future_state[2]))+","+str(float(future_state[3]))+","+str(action)+"\n")
+        #future_state = gp.predict_f(scaler.transform([np.concatenate((delta_T,future_state,action), axis=0)]))[0][0]
+        #print(np.array([np.concatenate((delta_T,future_state,action), axis=0)]))
+        future_state = gp.predict_f(np.array([np.concatenate((delta_T,future_state,action), axis=0)]))[0][0]
+        #print(future_state[0][0,1])
+        #print("action")
+        action = [a*future_state[0]+b*future_state[1]+c*future_state[2]+d*future_state[3]]
+        trajectory.append(future_state)
+    output_data.close()
+    predicted_states.append(trajectory)
+        
+        # Here, you would compute a cost function based on the predicted trajectory
+        # For simplicity, let's assume a simple cost function:
+    cost = np.array([time_step*np.sum(np.array(trajectory)**2) for trajectory in predicted_states])
+    print("final_state")
     print(future_state)
-    action = [a*future_state[0]+b*future_state[1]+c*future_state[2]+d*future_state[3]]
-    trajectory.append(future_state)
-predicted_states.append(trajectory)
-    
-    # Here, you would compute a cost function based on the predicted trajectory
-    # For simplicity, let's assume a simple cost function:
-cost = np.array([time_step*np.sum(np.array(trajectory)**2) for trajectory in predicted_states])
-print(cost)
+    print("a:"+str(a)+"b:"+str(b)+"c:"+str(c)+"d:"+str(d))
+    print("cost")
+    print(cost)
+
+def write_policy(a,b,c,d):
+    policy_file = "policy_config.txt"
+    policy = open(policy_file,"w")
+    policy.write("#proportional\n")
+    policy.write(str(a)+"\n")
+    policy.write(str(b)+"\n")
+    policy.write(str(c)+"\n")
+    policy.write(str(d)+"\n")
+    policy.close()
+
+def reset_sim(num):
+    reset_file = "test.txt"
+    reset = open(reset_file,"w")
+    reset.write(str(num))
+    reset.close()
+
+def add_policy_data(a,b,c,d,input_data,output_data,kernel,optimizer):
+    write_policy(a,b,c,d)
+    reset_sim(1)
+    print("simulation_reset")
+    time.sleep(12)
+
+    print("loading_input")
+    input_data_1, output_data_1 = load_data("data.txt")
+    print("loaded_input")
+    #scaler = StandardScaler()
+    #input_data_scaled = scaler.fit_transform(input_data)
+    #input_data_scaled = input_data
+    input_data = np.vstack((input_data, input_data_1))
+    output_data = np.vstack((output_data, output_data_1))
+    # Set up the GP kernel (RBF kernel + constant kernel)
+    #kernel = C(1.0, (1e-6, 15)) * RBF(1.0, (1e-6, 15))
+    # Initialize GP regressor
+    print("fitting_model")
+    #gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=100, alpha=10**(-2))
+    print("regress_done")
+    # Fit the GP model to the data
+    #gp.fit(input_data_scaled, output_data)
+    print("fitted_model")
+    # Define a kernel (RBF kernel with a constant factor)
+    kernel = gpflow.kernels.SquaredExponential()
+    # Create a GP model
+    model = gpflow.models.GPR(data=(np.array(input_data), np.array(output_data)), kernel=kernel)
+    # Optimize the model
+    optimizer = gpflow.optimizers.Scipy()
+    optimizer.minimize(model.training_loss, model.trainable_variables, options=dict(maxiter=100))
+    return model,input_data,output_data
+
+write_policy(7.2,5.76,80,-30)
+reset_sim(1)
+print("simulation_reset")
+time.sleep(12)
+
+print("loading_input")
+input_data, output_data = load_data("data.txt")
+print("loaded_input")
+scaler = StandardScaler()
+input_data_scaled = scaler.fit_transform(input_data)
+input_data_scaled = input_data
+# Set up the GP kernel (RBF kernel + constant kernel)
+#kernel = C(1.0, (1e-6, 15)) * RBF(1.0, (1e-6, 15))
+# Initialize GP regressor
+print("fitting_model")
+#gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=100, alpha=10**(-2))
+print("regress_done")
+# Fit the GP model to the data
+#gp.fit(input_data_scaled, output_data)
+print("fitted_model")
+# Define a kernel (RBF kernel with a constant factor)
+kernel = gpflow.kernels.SquaredExponential()
+# Create a GP model
+model = gpflow.models.GPR(data=(np.array(input_data_scaled), np.array(output_data)), kernel=kernel)
+# Optimize the model
+optimizer = gpflow.optimizers.Scipy()
+optimizer.minimize(model.training_loss, model.trainable_variables, options=dict(maxiter=100))
+
+a_values = [7.3,7.9,7.1,8.3]
+b_values = [5.7,5.8,6,6.1]
+c_values = [70,90]
+d_values = [-25,-35]
+for a in a_values:
+    for b in b_values:
+        for c in c_values:
+            for d in d_values:
+                model,input_data_scaled,output_data = add_policy_data(a,b,c,d,input_data_scaled,output_data,kernel,optimizer)
+
+
+a,b,c,d = 7.2,5.76,80,-30
+evaluate_policy(a,b,c,d,scaler,model)
+a,b,c,d = 7.225,5.76,80,-30
+evaluate_policy(a,b,c,d,scaler,model)
+a,b,c,d = 7.25,5.76,80,-30
+evaluate_policy(a,b,c,d,scaler,model)
+a,b,c,d = 7.275,5.76,80,-30
+evaluate_policy(a,b,c,d,scaler,model)
+a,b,c,d = 7.9,8,80,-30
+evaluate_policy(a,b,c,d,scaler,model)

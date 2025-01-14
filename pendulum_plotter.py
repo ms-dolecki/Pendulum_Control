@@ -93,3 +93,4 @@ class Pendulum_Plotter:
             self.pendulum_variables.running = True
             self.start = False
 
+
