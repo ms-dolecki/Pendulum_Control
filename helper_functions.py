@@ -113,7 +113,8 @@ class Pendulum_Variables:
         self.data_file = open(file_name, 'w')
 
     def update(self):
-        time_1 = time.time()
+        #time_1 = time.time()
+        time_1 = self.time_0 + 0.001
         t = time_1 - self.time_0
         
         # accelerate base to follow cursor
@@ -145,14 +146,17 @@ class Pendulum_Variables:
             #print(c)
             #print("d")
             #print(d)
-            if time.time() - self.sample_time > 0.1: 
+            #if time.time() - self.sample_time > 0.1:
+            if time_1 - self.sample_time > 0.1: 
                 a = self.policy_vector[0]
                 b = self.policy_vector[1]
                 c = self.policy_vector[2]
                 d = self.policy_vector[3]
                 self.a_base = a*self.x+b*self.v+c*(3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318)+d*self.angle_dots_vector[0][0]
-                self.data_file.write(str(time.time()-self.sample_time)+","+str(self.x)+","+str(self.v)+","+str((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
-                self.sample_time = time.time()
+                #self.data_file.write(str(time.time()-self.sample_time)+","+str(self.x)+","+str(self.v)+","+str((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
+                self.data_file.write(str(time_1-self.sample_time)+","+str(self.x)+","+str(self.v)+","+str((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
+                #self.sample_time = time.time()
+                self.sample_time = time_1
         #print(a_base)
         if abs(self.x) > 3:
             self.a_base = 0
@@ -188,5 +192,9 @@ class Pendulum_Variables:
         if time_1 - self.initial_time > 10:
             self.running = False
             self.data_file.close()
+            print("run done")
+            simdone_file = open("sim_done.txt","w")
+            simdone_file.write("run_done"+str(time.time()))
+            simdone_file.close()
         time.sleep(0.00001)
 
