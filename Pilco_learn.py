@@ -48,6 +48,44 @@ class Pilco_learn:
         data.close()
         return input_data[:-1],output_data[1:]
 
+    def load_data_2(self,data_file):
+        data = open(data_file, "r")
+        input_data = []
+        output_data = []
+        for ln in data:
+            ln.strip()
+            ln = ln.strip("\n").split(",")
+            delta_T = float(ln[0].strip())
+            x_input = float(ln[1].strip())
+            v_input = float(ln[2].strip())
+            angle_input = float(ln[3].strip())
+            angle_dot_input = float(ln[4].strip())
+            a_base = float(ln[5].strip())
+            x_output = float(ln[6].strip())
+            v_output = float(ln[7].strip())
+            angle_output = float(ln[8].strip())
+            angle_dot_output = float(ln[9].strip())
+            input_data.append([delta_T,x_input,v_input,angle_input,angle_dot_input,a_base])
+            output_data.append([x_output,v_output,angle_output,angle_dot_output])
+        data.close()
+        return input_data,output_data
+
+    def save_model_data(self,input_output_data,data_file):
+        data = open(data_file, "w")
+        for row in input_output_data:
+            delta_T = row[0]
+            x_input = row[1]
+            v_input = row[2]
+            theta_input = row[3]
+            theta_dot_input = row[4]
+            a_base = row[5]
+            x_output = row[6]
+            v_output = row[7]
+            theta_output = row[8]
+            theta_dot_output = row[9]
+            data.write(str(delta_T)+","+str(x_input)+","+str(v_input)+","+str(theta_input)+","+str(theta_dot_input)+","+str(a_base)+","+str(x_output)+","+str(v_output)+","+str(theta_output)+","+str(theta_dot_output)+"\n")
+        data.close()
+
     def evaluate_policy(self,a,b,c,d,scaler,gp):
         time_step = 0.1
         total_time = 10
@@ -123,9 +161,10 @@ class Pilco_learn:
             output_data = output_data_1
         
         input_output_data = np.hstack((input_data,output_data))
+        self.save_model_data(input_output_data,"model.txt")
         np.random.shuffle(input_output_data)
-        input_data = input_output_data[:1000,:6]
-        output_data = input_output_data[:1000,6:10]
+        input_data = input_output_data[:20000,:6]
+        output_data = input_output_data[:20000,6:10]
         # Set up the GP kernel (RBF kernel + constant kernel)
         #kernel = C(1.0, (1e-6, 15)) * RBF(1.0, (1e-6, 15))
         # Initialize GP regressor
@@ -177,21 +216,23 @@ model = None
 #optimizer = gpflow.optimizers.Scipy()
 #optimizer.minimize(model.training_loss, model.trainable_variables, options=dict(maxiter=100))
 
-#a_values = [7.3,7.9,7.1,8.3]
-#b_values = [5.7,5.8,6,6.1]
-#a_values = [7.3,7.9]
-#b_values = [5.7,6.1]
-#c_values = [70,90]
-#d_values = [-25,-35]
-#for a in a_values:
-#    for b in b_values:
-#        for c in c_values:
-#            for d in d_values:
-#                model,input_data_scaled,output_data = my_Pilco_learn.add_policy_data(a,b,c,d,input_data_scaled,output_data,kernel)
+a_values = [7.3,7.9,7.1,8.3]
+b_values = [5.7,5.8,6,6.1]
+a_values = [7.3,7.9]
+b_values = [5.7,6.1]
+c_values = [70,90]
+d_values = [-25,-35]
+for a in a_values:
+    for b in b_values:
+        for c in c_values:
+            for d in d_values:
+                model,input_data_scaled,output_data = my_Pilco_learn.add_policy_data(a,b,c,d,input_data_scaled,output_data,kernel)
 
 #tf.saved_model.save(model, 'gpflow_model')
 #model = tf.saved_model.load('gpflow_model')
-model = gpflow.models.load_model('gpflow_model')
+#model = gpflow.models.load_model('gpflow_model')
+input_data,output_data = my_Pilco_learn.load_data_2("model.txt")
+model = gpflow.models.GPR(data=(np.array(input_data), np.array(output_data)), kernel=kernel)
 a,b,c,d = 7.2,5.76,80,-30
 my_Pilco_learn.evaluate_policy(a,b,c,d,scaler,model)
 a,b,c,d = 7.225,5.76,80,-30
