@@ -4,10 +4,11 @@ sudo apt-get install vim -y
 sudo apt-get install openssh-client openssh-server -y
 sudo cp sshd_config /etc/ssh/sshd_config
 sudo service ssh restart
-sudo apt-get install -y libsm6 libxext6 ffmpeg libfontconfig1 libxrender1 libgl1-mesa-glx
+sudo apt-get install -y libsm6 libxext6 ffmpeg libfontconfig1 libxrender1 libgl1-mesa-glx libgl1-mesa-dri libgl1
 sudo apt-get install -y libxcb-cursor0
 sudo apt-get install -y '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev
-sudo apt-get install qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools
-pip3 install --upgrade pip3
-pip3 install numpy pyqt5 pyqtgraph watchdog serial gpflow
+sudo apt-get install -y qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools
+pip3 install --upgrade setuptools wheel
+pip3 install pyqt5 --config-settings --confirm-license= --verbose
+pip3 install numpy pyqtgraph watchdog serial gpflow
 touch ~/.Xauthority
