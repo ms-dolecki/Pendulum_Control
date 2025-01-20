@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.optimize import minimize
 import gpflow
 #from sklearn.gaussian_process import GaussianProcessRegressor
 #from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
@@ -101,7 +102,7 @@ class Pilco_learn:
         output_data_file = "Pilco_trajectory.txt"
         output_data = open(output_data_file, "w")
         for _ in range(num_steps):
-            output_data.write(str(time_step)+","+str(float(future_state[0]))+","+str(float(future_state[1]))+","+str(float(future_state[2]))+","+str(float(future_state[3]))+","+str(action)+"\n")
+            #output_data.write(str(time_step)+","+str(float(future_state[0]))+","+str(float(future_state[1]))+","+str(float(future_state[2]))+","+str(float(future_state[3]))+","+str(action)+"\n")
             #future_state = gp.predict_f(scaler.transform([np.concatenate((delta_T,future_state,action), axis=0)]))[0][0]
             #print(np.array([np.concatenate((delta_T,future_state,action), axis=0)]))
             future_state = gp.predict_f(np.array([np.concatenate((delta_T,future_state,action), axis=0)]))[0][0]
@@ -120,6 +121,7 @@ class Pilco_learn:
         print("a:"+str(a)+"b:"+str(b)+"c:"+str(c)+"d:"+str(d))
         print("cost")
         print(cost)
+        return cost
 
     def write_policy(self,a,b,c,d):
         policy_file = "policy_config.txt"
@@ -144,7 +146,9 @@ class Pilco_learn:
         self.reset_sim(1)
         #print("simulation_reset")
         while self.sim_iteration == current_sim_iteration:
-            print(self.sim_iteration)
+            #print(self.sim_iteration)
+            pass
+        print(self.sim_iteration)
 
         print("loading_input")
         input_data_1, output_data_1 = self.load_data("data.txt")
@@ -161,10 +165,10 @@ class Pilco_learn:
             output_data = output_data_1
         
         input_output_data = np.hstack((input_data,output_data))
-        self.save_model_data(input_output_data,"model.txt")
         np.random.shuffle(input_output_data)
-        input_data = input_output_data[:20000,:6]
-        output_data = input_output_data[:20000,6:10]
+        self.save_model_data(input_output_data,"model.txt")
+        input_data = input_output_data[:,:6]
+        output_data = input_output_data[:,6:10]
         # Set up the GP kernel (RBF kernel + constant kernel)
         #kernel = C(1.0, (1e-6, 15)) * RBF(1.0, (1e-6, 15))
         # Initialize GP regressor
@@ -175,12 +179,12 @@ class Pilco_learn:
         #gp.fit(input_data_scaled, output_data)
         #print("fitted_model")
         # Define a kernel (RBF kernel with a constant factor)
-        kernel = gpflow.kernels.SquaredExponential()
+        #kernel = gpflow.kernels.SquaredExponential()
         # Create a GP model
-        model = gpflow.models.GPR(data=(np.array(input_data), np.array(output_data)), kernel=kernel)
+        #model = gpflow.models.GPR(data=(np.array(input_data), np.array(output_data)), kernel=kernel)
         # Optimize the model
-        optimizer = gpflow.optimizers.Scipy()
-        optimizer.minimize(model.training_loss, model.trainable_variables, options=dict(maxiter=100))
+        #optimizer = gpflow.optimizers.Scipy()
+        #optimizer.minimize(model.training_loss, model.trainable_variables, options=dict(maxiter=100))
         return model,input_data,output_data
 
 my_Pilco_learn = Pilco_learn()
@@ -218,21 +222,38 @@ model = None
 
 a_values = [7.3,7.9,7.1,8.3]
 b_values = [5.7,5.8,6,6.1]
-a_values = [7.3,7.9]
-b_values = [5.7,6.1]
+#a_values = [7.3,7.9]
+#b_values = [5.7,6.1]
 c_values = [70,90]
 d_values = [-25,-35]
-for a in a_values:
-    for b in b_values:
-        for c in c_values:
-            for d in d_values:
-                model,input_data_scaled,output_data = my_Pilco_learn.add_policy_data(a,b,c,d,input_data_scaled,output_data,kernel)
+#for a in a_values:
+#    for b in b_values:
+#        for c in c_values:
+#            for d in d_values:
+#                model,input_data_scaled,output_data = my_Pilco_learn.add_policy_data(a,b,c,d,input_data_scaled,output_data,kernel)
 
 #tf.saved_model.save(model, 'gpflow_model')
 #model = tf.saved_model.load('gpflow_model')
 #model = gpflow.models.load_model('gpflow_model')
+#input_data,output_data = my_Pilco_learn.load_data_2("model.txt")
+#model = gpflow.models.GPR(data=(np.array(input_data), np.array(output_data)), kernel=kernel)
 input_data,output_data = my_Pilco_learn.load_data_2("model.txt")
-model = gpflow.models.GPR(data=(np.array(input_data), np.array(output_data)), kernel=kernel)
+model = gpflow.models.GPR(data=(np.array(input_data[:400]), np.array(output_data[:400])), kernel=kernel)
+optimizer = gpflow.optimizers.Scipy()
+for batch_number in range(15):
+    input_batch = np.array(input_data[batch_number*400:(batch_number+1)*400])
+    output_batch = np.array(output_data[batch_number*400:(batch_number+1)*400])
+        
+    # Update the entire dataset for this iteration. 
+    # Note: This might not be necessary if you're only updating with the batch
+    # model.data = (X_batch, Y_batch)
+    model.data = (input_batch, output_batch)
+    # Instead, use a closure for the current batch:
+    closure = model.training_loss_closure()
+        
+    # Optimize using the batch
+    optimizer.minimize(closure, variables=model.trainable_variables, options=dict(maxiter=10))
+    
 a,b,c,d = 7.2,5.76,80,-30
 my_Pilco_learn.evaluate_policy(a,b,c,d,scaler,model)
 a,b,c,d = 7.225,5.76,80,-30
@@ -243,3 +264,13 @@ a,b,c,d = 7.275,5.76,80,-30
 my_Pilco_learn.evaluate_policy(a,b,c,d,scaler,model)
 a,b,c,d = 7.9,8,80,-30
 my_Pilco_learn.evaluate_policy(a,b,c,d,scaler,model)
+a,b,c,d = 8.3, 6.1, 90, -35
+my_Pilco_learn.evaluate_policy(a,b,c,d,scaler,model)
+print("wait")
+time.sleep(2)
+def objective_function(initial_guess):
+    a,b,c,d = initial_guess
+    return my_Pilco_learn.evaluate_policy(a,b,c,d,scaler,model)
+
+best_policy = minimize(objective_function,[a,b,c,d], method='Nelder-Mead')
+print(best_policy)
