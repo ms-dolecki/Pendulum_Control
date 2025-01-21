@@ -8,6 +8,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import time
 import tensorflow as tf
+import json
 
 
 class Pilco_learn:
@@ -27,10 +28,33 @@ class Pilco_learn:
         observer.schedule(event_handler, path=path_to_watch, recursive=False)  # Set recursive=True to monitor subdirectories
         observer.start()
 
+    def vector_square(self,vector):
+        output = []
+        for element in vector:
+            output.append([element*element1 for element1 in vector])
+        return output
+    
+    def vector_cube(self,vector):
+        output = []
+        for element in vector:
+            output.append([[element*element1 for element1 in row] for row in self.vector_square(vector)])
+        return output
+    
+    def calculate_action(self, state, policy):
+        p = np.array(state)
+        p2 = np.array(self.vector_square(state))
+        p3 = np.array(self.vector_cube(state))
+        a = np.array(policy["a"])
+        b = np.array(policy["b"])
+        c = np.array(policy["c"])
+        action = np.sum(a*p) + np.sum(b*p2) + np.sum(c*p3)
+        return action
+    
     def run_finish(self):
         print("run_finish")
         self.sim_iteration += 1
 
+    # loads time-ordered state data
     def load_data(self,data_file):
         data = open(data_file, "r")
         input_data = []
@@ -49,6 +73,7 @@ class Pilco_learn:
         data.close()
         return input_data[:-1],output_data[1:]
 
+    # loads collective input-output data
     def load_data_2(self,data_file):
         data = open(data_file, "r")
         input_data = []
@@ -71,6 +96,7 @@ class Pilco_learn:
         data.close()
         return input_data,output_data
 
+    # saves collective input-output data
     def save_model_data(self,input_output_data,data_file):
         data = open(data_file, "w")
         for row in input_output_data:
@@ -87,13 +113,15 @@ class Pilco_learn:
             data.write(str(delta_T)+","+str(x_input)+","+str(v_input)+","+str(theta_input)+","+str(theta_dot_input)+","+str(a_base)+","+str(x_output)+","+str(v_output)+","+str(theta_output)+","+str(theta_dot_output)+"\n")
         data.close()
 
-    def evaluate_policy(self,a,b,c,d,scaler,gp):
+    def evaluate_policy(self,policy,scaler,gp):
         time_step = 0.1
         total_time = 10
         delta_T = np.array([time_step])
         current_state = np.array([1.0,0.0,0.02123817989101573,-0.009558798511813068])
         #current_state = current_state.reshape(-1,1)
-        action = np.array([a*current_state[0]+b*current_state[1]+c*current_state[2]+d*current_state[3]])
+        #action = np.array([a*current_state[0]+b*current_state[1]+c*current_state[2]+d*current_state[3]])
+        state_vector = [current_state[0],current_state[1],current_state[2],current_state[3]]
+        action = np.array([self.calculate_action(state_vector,policy)])
         #print(np.concatenate((delta_T,current_state,action), axis=0))
         num_steps = int(total_time/time_step)
         predicted_states = []
@@ -108,7 +136,9 @@ class Pilco_learn:
             future_state = gp.predict_f(np.array([np.concatenate((delta_T,future_state,action), axis=0)]))[0][0]
             #print(future_state[0][0,1])
             #print("action")
-            action = [a*future_state[0]+b*future_state[1]+c*future_state[2]+d*future_state[3]]
+            #action = [a*future_state[0]+b*future_state[1]+c*future_state[2]+d*future_state[3]]
+            state_vector = [future_state[0],future_state[1],future_state[2],future_state[3]]
+            action = np.array([self.calculate_action(state_vector,policy)])
             trajectory.append(future_state)
         output_data.close()
         predicted_states.append(trajectory)
@@ -118,20 +148,22 @@ class Pilco_learn:
         cost = np.array([time_step*np.sum(np.array(trajectory)**2) for trajectory in predicted_states])
         print("final_state")
         print(future_state)
-        print("a:"+str(a)+"b:"+str(b)+"c:"+str(c)+"d:"+str(d))
+        print("a:"+str(policy['a'])+"b:"+str(policy['b'])+"c:"+str(policy['c']))
         print("cost")
         print(cost)
         return cost
 
-    def write_policy(self,a,b,c,d):
+    def write_policy(self,policy):
         policy_file = "policy_config.txt"
-        policy = open(policy_file,"w")
-        policy.write("#proportional\n")
-        policy.write(str(a)+"\n")
-        policy.write(str(b)+"\n")
-        policy.write(str(c)+"\n")
-        policy.write(str(d)+"\n")
-        policy.close()
+        with open(policy_file, 'w') as file:
+            json.dump(policy, file)
+        #policy = open(policy_file,"w")
+        #policy.write("#proportional\n")
+        #policy.write(str(a)+"\n")
+        #policy.write(str(b)+"\n")
+        #policy.write(str(c)+"\n")
+        #policy.write(str(d)+"\n")
+        #policy.close()
 
     def reset_sim(self,num):
         reset_file = "test.txt"
@@ -139,9 +171,8 @@ class Pilco_learn:
         reset.write(str(num))
         reset.close()
         
-
-    def add_policy_data(self,a,b,c,d,input_data,output_data,kernel):
-        self.write_policy(a,b,c,d)
+    def add_policy_data(self,policy,input_data,output_data):
+        self.write_policy(policy)
         current_sim_iteration = self.sim_iteration
         self.reset_sim(1)
         #print("simulation_reset")
@@ -185,7 +216,7 @@ class Pilco_learn:
         # Optimize the model
         #optimizer = gpflow.optimizers.Scipy()
         #optimizer.minimize(model.training_loss, model.trainable_variables, options=dict(maxiter=100))
-        return model,input_data,output_data
+        return input_data,output_data
 
 my_Pilco_learn = Pilco_learn()
 #my_Pilco_learn.write_policy(7.2,5.76,80,-30)
@@ -220,17 +251,26 @@ model = None
 #optimizer = gpflow.optimizers.Scipy()
 #optimizer.minimize(model.training_loss, model.trainable_variables, options=dict(maxiter=100))
 
-a_values = [7.3,7.9,7.1,8.3]
-b_values = [5.7,5.8,6,6.1]
+a1_values = [7.3,7.9,7.1,8.3]
+a2_values = [5.7,5.8,6,6.1]
 #a_values = [7.3,7.9]
 #b_values = [5.7,6.1]
-c_values = [70,90]
-d_values = [-25,-35]
-#for a in a_values:
-#    for b in b_values:
-#        for c in c_values:
-#            for d in d_values:
-#                model,input_data_scaled,output_data = my_Pilco_learn.add_policy_data(a,b,c,d,input_data_scaled,output_data,kernel)
+a3_values = [70,90]
+a4_values = [-25,-35]
+b = np.zeros((4,4)).tolist()
+c = np.zeros((4,4,4)).tolist()
+for a1 in a1_values:
+    for a2 in a2_values:
+        for a3 in a3_values:
+            for a4 in a4_values:
+                a = [a1,a2,a3,a4]
+                policy = {
+                    "a":a,
+                    "b":b,
+                    "c":c
+                }
+                #input_data_scaled,output_data = my_Pilco_learn.add_policy_data(policy,input_data_scaled,output_data)
+                print(a,b,c)
 
 #tf.saved_model.save(model, 'gpflow_model')
 #model = tf.saved_model.load('gpflow_model')
@@ -238,11 +278,13 @@ d_values = [-25,-35]
 #input_data,output_data = my_Pilco_learn.load_data_2("model.txt")
 #model = gpflow.models.GPR(data=(np.array(input_data), np.array(output_data)), kernel=kernel)
 input_data,output_data = my_Pilco_learn.load_data_2("model.txt")
-model = gpflow.models.GPR(data=(np.array(input_data[:400]), np.array(output_data[:400])), kernel=kernel)
+model = gpflow.models.GPR(data=(np.array(input_data[:50]), np.array(output_data[:50])), kernel=kernel)
 optimizer = gpflow.optimizers.Scipy()
-for batch_number in range(15):
-    input_batch = np.array(input_data[batch_number*400:(batch_number+1)*400])
-    output_batch = np.array(output_data[batch_number*400:(batch_number+1)*400])
+for batch_number in range(5):
+    input_batch = np.array(input_data[batch_number*50:(batch_number+1)*50])
+    output_batch = np.array(output_data[batch_number*50:(batch_number+1)*50])
+    print("test")
+    print(batch_number)
         
     # Update the entire dataset for this iteration. 
     # Note: This might not be necessary if you're only updating with the batch
@@ -253,24 +295,57 @@ for batch_number in range(15):
         
     # Optimize using the batch
     optimizer.minimize(closure, variables=model.trainable_variables, options=dict(maxiter=10))
+    #time.sleep(5)
     
-a,b,c,d = 7.2,5.76,80,-30
-my_Pilco_learn.evaluate_policy(a,b,c,d,scaler,model)
-a,b,c,d = 7.225,5.76,80,-30
-my_Pilco_learn.evaluate_policy(a,b,c,d,scaler,model)
-a,b,c,d = 7.25,5.76,80,-30
-my_Pilco_learn.evaluate_policy(a,b,c,d,scaler,model)
-a,b,c,d = 7.275,5.76,80,-30
-my_Pilco_learn.evaluate_policy(a,b,c,d,scaler,model)
-a,b,c,d = 7.9,8,80,-30
-my_Pilco_learn.evaluate_policy(a,b,c,d,scaler,model)
-a,b,c,d = 8.3, 6.1, 90, -35
-my_Pilco_learn.evaluate_policy(a,b,c,d,scaler,model)
+#a,b,c,d = 7.2,5.76,80,-30
+policy = {
+                    "a":[7.2,5.76,80,-30],
+                    "b":b,
+                    "c":c
+        }
+my_Pilco_learn.evaluate_policy(policy,scaler,model)
+#a,b,c,d = 7.225,5.76,80,-30
+policy = {
+                    "a":[7.225,5.76,80,-30],
+                    "b":b,
+                    "c":c
+        }
+#my_Pilco_learn.evaluate_policy(policy,scaler,model)
+#a,b,c,d = 7.25,5.76,80,-30
+#my_Pilco_learn.evaluate_policy(policy,scaler,model)
+#a,b,c,d = 7.275,5.76,80,-30
+#my_Pilco_learn.evaluate_policy(policy,scaler,model)
+#a,b,c,d = 7.9,8,80,-30
+#my_Pilco_learn.evaluate_policy(policy,scaler,model)
+#a,b,c,d = 8.3, 6.1, 90, -35
+#my_Pilco_learn.evaluate_policy(policy,scaler,model)
 print("wait")
 time.sleep(2)
-def objective_function(initial_guess):
-    a,b,c,d = initial_guess
-    return my_Pilco_learn.evaluate_policy(a,b,c,d,scaler,model)
 
-best_policy = minimize(objective_function,[a,b,c,d], method='Nelder-Mead')
+def flatten_list(nested_list):
+    """
+    Recursively flatten a nested list structure into a single list.
+    """
+    flat_list = []
+    for item in nested_list:
+        if isinstance(item, (list, tuple)):
+            flat_list.extend(flatten_list(item))
+        else:
+            flat_list.append(item)
+    return flat_list
+
+# Flatten the values, ignoring keys
+initial_guess = []
+for value in policy.values():
+    initial_guess.extend(flatten_list(value))
+
+def objective_function(initial_guess):
+    policy = {
+    "a" : initial_guess[:4],
+    "b" : np.array(initial_guess[4:20]).reshape((4,4)).tolist(),
+    "c" : np.array(initial_guess[20:]).reshape((4,4,4)).tolist()
+    }
+    return my_Pilco_learn.evaluate_policy(policy,scaler,model)
+
+best_policy = minimize(objective_function,initial_guess, method='Nelder-Mead')
 print(best_policy)

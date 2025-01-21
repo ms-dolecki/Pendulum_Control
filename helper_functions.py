@@ -7,6 +7,7 @@ import sys
 from PyQt5.QtGui import QCursor
 from PyQt5.QtWidgets import QApplication
 from copy import deepcopy
+import json
 
 app = QApplication(sys.argv)
 
@@ -47,7 +48,7 @@ def T_vector(n, masses_v, angles_v, external_acceleration_v):
     return T
                           
 class Pendulum_Variables:
-    def __init__(self, n, masses_v, radii_v, angles_v, angle_dots_v, policy_type, policy_v,policy_file):
+    def __init__(self, n, masses_v, radii_v, angles_v, angle_dots_v, policy_v, policy_file):
         # pendulum config
         self.n = n
         self.masses_vector_0 = masses_v
@@ -69,7 +70,7 @@ class Pendulum_Variables:
         self.x = 0
         self.v = 0
         self.a_base = 0
-        self.policy_type = policy_type
+        #self.policy_type = policy_type
         self.policy_vector = policy_v
         self.policy_file = policy_file
         print(policy_v)
@@ -85,22 +86,46 @@ class Pendulum_Variables:
         self.time_0 = time.time()
         self.initial_time = time.time()
         self.sample_time = time.time()
+
+    def vector_square(self,vector):
+        output = []
+        for element in vector:
+            output.append([element*element1 for element1 in vector])
+        return output
+    
+    def vector_cube(self,vector):
+        output = []
+        for element in vector:
+            output.append([[element*element1 for element1 in row] for row in self.vector_square(vector)])
+        return output
+    
+    def calculate_action(self, state, policy):
+        p = numpy.array(state)
+        p2 = numpy.array(self.vector_square(state))
+        p3 = numpy.array(self.vector_cube(state))
+        a = numpy.array(policy["a"])
+        b = numpy.array(policy["b"])
+        c = numpy.array(policy["c"])
+        action = numpy.sum(a*p) + numpy.sum(b*p2) + numpy.sum(c*p3)
+        return action
     
     def load_policy(self):
-        policy_config = open(self.policy_file, "r")
-        policy = []
-        policy_type = ""
-        for ln in policy_config:
-            ln.strip()
-            if ln[0] != "#":
-                ln = ln.strip("\n")
-                policy.append(float(ln.strip()))
-            else:
-                ln = ln.strip("\n")
-                policy_type = str(ln[1:])
-        policy_config.close()
-        self.policy_type = policy_type
-        self.policy_vector = numpy.array(policy)
+        #policy_config = open(self.policy_file, "r")
+        #policy = []
+        #policy_type = ""
+        #for ln in policy_config:
+        #    ln.strip()
+        #    if ln[0] != "#":
+        #        ln = ln.strip("\n")
+        #        policy.append(float(ln.strip()))
+        #    else:
+        #        ln = ln.strip("\n")
+        #        policy_type = str(ln[1:])
+        #policy_config.close()
+        #self.policy_type = policy_type
+        #self.policy_vector = numpy.array(policy)
+        with open(self.policy_file, 'r') as file:
+            self.policy_vector = json.load(file)
 
     def calculate_KLT(self, angles_v, external_acceleration_v):
         K = K_matrix(self.n, self.masses_vector, self.radii_vector, angles_v)
@@ -129,7 +154,8 @@ class Pendulum_Variables:
         #print(self.policy_vector)
         #print("yo2")
         #print(self.policy_vector[4])
-        if str(self.policy_type) == "proportional":
+        #if str(self.policy_type) == "proportional":
+        if True:
             #print("in")
             #self.a_base = self.policy_vector[0]*(self.policy_vector[1]*(self.policy_vector[2]*(self.x+self.policy_vector[3]*self.v) + 3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318) - self.policy_vector[4]*self.angle_dots_vector[0][0])
             #print(self.policy_vector[1])
@@ -148,11 +174,16 @@ class Pendulum_Variables:
             #print(d)
             #if time.time() - self.sample_time > 0.1:
             if time_1 - self.sample_time > 0.1: 
-                a = self.policy_vector[0]
-                b = self.policy_vector[1]
-                c = self.policy_vector[2]
-                d = self.policy_vector[3]
-                self.a_base = a*self.x+b*self.v+c*(3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318)+d*self.angle_dots_vector[0][0]
+                #a = self.policy_vector[0]
+                #b = self.policy_vector[1]
+                #c = self.policy_vector[2]
+                #d = self.policy_vector[3]
+                #a = numpy.array(self.policy_vector["a"])
+                #p = numpy.array([self.x,self.v,(3.14159/2 - (self.angles_vector[0][0] % 6.28318)),self.angle_dots_vector[0][0]])
+                state_vector = [self.x,self.v,(3.14159/2 - (self.angles_vector[0][0] % 6.28318)),self.angle_dots_vector[0][0]]
+                #self.a_base = numpy.dot(a,p)
+                self.a_base = self.calculate_action(state_vector, self.policy_vector)
+                #self.a_base = a*self.x+b*self.v+c*(3.14159/2 - (self.angles_vector[0][0] % 6.28318))+d*self.angle_dots_vector[0][0]
                 #self.data_file.write(str(time.time()-self.sample_time)+","+str(self.x)+","+str(self.v)+","+str((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
                 self.data_file.write(str(time_1-self.sample_time)+","+str(self.x)+","+str(self.v)+","+str((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
                 #self.sample_time = time.time()

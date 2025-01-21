@@ -6,6 +6,7 @@ from data_output import *
 import threading
 import serial
 from copy import deepcopy
+import json
 
 # get options from command line
 parser = argparse.ArgumentParser(
@@ -19,7 +20,7 @@ args = parser.parse_args()
 config_file = args.config_file
 pendulum_config = open(config_file, "r")
 policy_file = args.policy_file
-policy_config = open(policy_file, "r")
+#policy_config = open(policy_file, "r")
 masses = []
 radii = []
 angles = []
@@ -38,22 +39,24 @@ for ln in pendulum_config:
         radii.append([radius])
         angles.append([angle])
         angle_dots.append([angle_dot])
-for ln in policy_config:
-    ln.strip()
-    if ln[0] != "#":
-        ln = ln.strip("\n")
-        policy.append(float(ln.strip()))
-    else:
-        ln = ln.strip("\n")
-        policy_type = str(ln[1:])
-policy_config.close()
-print(policy)
+#for ln in policy_config:
+#    ln.strip()
+#    if ln[0] != "#":
+#        ln = ln.strip("\n")
+#        policy.append(float(ln.strip()))
+#    else:
+#        ln = ln.strip("\n")
+#        policy_type = str(ln[1:])
+#policy_config.close()
+#print(policy)
+with open(policy_file, 'r') as file:
+    policy = json.load(file)
         
 masses_vector_0 = numpy.array(masses)
 radii_vector_0 = numpy.array(radii)
 angles_vector_0 = numpy.array(angles)
 angle_dots_vector_0 = numpy.array(angle_dots)
-policy_0 = numpy.array(policy)
+policy_0 = numpy.array(policy["a"])
 print(policy_0)
 print("yo")
 
@@ -73,7 +76,7 @@ def output_data(data_out):
         
 
 # initialize pendulum variables and update in separate thread
-pendulum_variables = Pendulum_Variables(len(masses_vector_0), deepcopy(masses_vector_0), deepcopy(radii_vector_0), deepcopy(angles_vector_0), deepcopy(angle_dots_vector_0), policy_type, deepcopy(policy_0),policy_file)
+pendulum_variables = Pendulum_Variables(len(masses_vector_0), deepcopy(masses_vector_0), deepcopy(radii_vector_0), deepcopy(angles_vector_0), deepcopy(angle_dots_vector_0), deepcopy(policy),policy_file)
 t1 = threading.Thread(target=update_pendulum_variables, args=[pendulum_variables])
 t1.start()
 
