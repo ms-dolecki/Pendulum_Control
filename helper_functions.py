@@ -1,5 +1,6 @@
 import time
 from math import sin, cos, trunc
+import math
 import numpy
 from numpy.linalg import inv
 from numpy import dot
@@ -81,7 +82,7 @@ class Pendulum_Variables:
         self.running = False
 
         self.data_file = open('data.txt', 'w')
-        self.data_file.write(str(0)+","+str(self.x)+","+str(self.v)+","+str((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
+        self.data_file.write(str(0)+","+str(self.x)+","+str(self.v)+","+str((3.14159 - ((self.angles_vector[0][0] + math.pi/2)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
         # time
         self.time_0 = time.time()
         self.initial_time = time.time()
@@ -180,7 +181,7 @@ class Pendulum_Variables:
                 #d = self.policy_vector[3]
                 #a = numpy.array(self.policy_vector["a"])
                 #p = numpy.array([self.x,self.v,(3.14159/2 - (self.angles_vector[0][0] % 6.28318)),self.angle_dots_vector[0][0]])
-                state_vector = [self.x,self.v,(3.14159/2 - (self.angles_vector[0][0] % 6.28318)),self.angle_dots_vector[0][0]]
+                state_vector = [self.x,self.v,(3.14159 - ((self.angles_vector[0][0]+math.pi/2) % 6.28318)),self.angle_dots_vector[0][0]]
                 #self.a_base = numpy.dot(a,p)
                 self.a_base = self.calculate_action(state_vector, self.policy_vector)
                 #self.a_base = a*self.x+b*self.v+c*(3.14159/2 - (self.angles_vector[0][0] % 6.28318))+d*self.angle_dots_vector[0][0]

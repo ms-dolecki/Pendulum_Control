@@ -259,30 +259,41 @@ a3_values = [70,90]
 a4_values = [-25,-35]
 b = np.zeros((4,4)).tolist()
 c = np.zeros((4,4,4)).tolist()
-for a1 in a1_values:
-    for a2 in a2_values:
-        for a3 in a3_values:
-            for a4 in a4_values:
-                a = [a1,a2,a3,a4]
-                policy = {
+#for a1 in a1_values:
+#    for a2 in a2_values:
+#        for a3 in a3_values:
+#            for a4 in a4_values:
+#                a = [a1,a2,a3,a4]
+#                policy = {
+#                    "a":a,
+#                    "b":b,
+#                    "c":c
+#                }
+#                #input_data_scaled,output_data = my_Pilco_learn.add_policy_data(policy,input_data_scaled,output_data)
+#                print(a,b,c)
+
+for index in range(10):
+    a = np.random.uniform(-100, 100, size=(4)).tolist()
+    b = np.random.uniform(-100, 100, size=(4,4)).tolist()
+    c = np.random.uniform(-100, 100, size=(4,4,4)).tolist()
+    policy = {
                     "a":a,
                     "b":b,
                     "c":c
-                }
-                #input_data_scaled,output_data = my_Pilco_learn.add_policy_data(policy,input_data_scaled,output_data)
-                print(a,b,c)
-
+    }
+    print(a,b,c)
+    #input_data_scaled,output_data = my_Pilco_learn.add_policy_data(policy,input_data_scaled,output_data)
 #tf.saved_model.save(model, 'gpflow_model')
 #model = tf.saved_model.load('gpflow_model')
 #model = gpflow.models.load_model('gpflow_model')
 #input_data,output_data = my_Pilco_learn.load_data_2("model.txt")
 #model = gpflow.models.GPR(data=(np.array(input_data), np.array(output_data)), kernel=kernel)
 input_data,output_data = my_Pilco_learn.load_data_2("model.txt")
-model = gpflow.models.GPR(data=(np.array(input_data[:50]), np.array(output_data[:50])), kernel=kernel)
+model = gpflow.models.GPR(data=(np.array(input_data[:100]), np.array(output_data[:100])), kernel=kernel)
 optimizer = gpflow.optimizers.Scipy()
-for batch_number in range(5):
-    input_batch = np.array(input_data[batch_number*50:(batch_number+1)*50])
-    output_batch = np.array(output_data[batch_number*50:(batch_number+1)*50])
+for batch_number in range(9):
+    input_batch = np.array(input_data[batch_number*100:(batch_number+1)*100])
+    output_batch = np.array(output_data[batch_number*100:(batch_number+1)*100])
     print("test")
     print(batch_number)
         
