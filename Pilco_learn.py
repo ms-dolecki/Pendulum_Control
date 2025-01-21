@@ -274,15 +274,15 @@ c = np.zeros((4,4,4)).tolist()
 
 for index in range(10):
     a = np.random.uniform(-100, 100, size=(4)).tolist()
-    b = np.random.uniform(-100, 100, size=(4,4)).tolist()
-    c = np.random.uniform(-100, 100, size=(4,4,4)).tolist()
+    b = np.random.uniform(-10, 10, size=(4,4)).tolist()
+    c = np.random.uniform(-1, 1, size=(4,4,4)).tolist()
     policy = {
                     "a":a,
                     "b":b,
                     "c":c
     }
     print(a,b,c)
-    #input_data_scaled,output_data = my_Pilco_learn.add_policy_data(policy,input_data_scaled,output_data)
+    input_data_scaled,output_data = my_Pilco_learn.add_policy_data(policy,input_data_scaled,output_data)
 #tf.saved_model.save(model, 'gpflow_model')
 #model = tf.saved_model.load('gpflow_model')
 #model = gpflow.models.load_model('gpflow_model')
