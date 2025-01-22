@@ -47,7 +47,7 @@ class Pilco_learn:
         a = np.array(policy["a"])
         b = np.array(policy["b"])
         c = np.array(policy["c"])
-        action = np.sum(a*p) + np.sum(b*p2) + np.sum(c*p3)
+        action = max(min(np.sum(a*p) + np.sum(b*p2) + np.sum(c*p3),3),-3)
         return action
     
     def run_finish(self):
@@ -309,18 +309,18 @@ for batch_number in range(9):
     #time.sleep(5)
     
 #a,b,c,d = 7.2,5.76,80,-30
-policy = {
-                    "a":[7.2,5.76,80,-30],
-                    "b":b,
-                    "c":c
-        }
-my_Pilco_learn.evaluate_policy(policy,scaler,model)
-#a,b,c,d = 7.225,5.76,80,-30
-policy = {
-                    "a":[7.225,5.76,80,-30],
-                    "b":b,
-                    "c":c
-        }
+#policy = {
+#                    "a":[7.2,5.76,80,-30],
+#                    "b":b,
+#                    "c":c
+#        }
+#my_Pilco_learn.evaluate_policy(policy,scaler,model)
+##a,b,c,d = 7.225,5.76,80,-30
+#policy = {
+#                    "a":[7.225,5.76,80,-30],
+#                    "b":b,
+#                    "c":c
+#        }
 #my_Pilco_learn.evaluate_policy(policy,scaler,model)
 #a,b,c,d = 7.25,5.76,80,-30
 #my_Pilco_learn.evaluate_policy(policy,scaler,model)
@@ -358,5 +358,5 @@ def objective_function(initial_guess):
     }
     return my_Pilco_learn.evaluate_policy(policy,scaler,model)
 
-best_policy = minimize(objective_function,initial_guess, method='Nelder-Mead')
+best_policy = minimize(objective_function,initial_guess, method='Powell')
 print(best_policy)

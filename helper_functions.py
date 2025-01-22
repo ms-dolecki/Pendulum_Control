@@ -107,7 +107,7 @@ class Pendulum_Variables:
         a = numpy.array(policy["a"])
         b = numpy.array(policy["b"])
         c = numpy.array(policy["c"])
-        action = numpy.sum(a*p) + numpy.sum(b*p2) + numpy.sum(c*p3)
+        action = max(min(numpy.sum(a*p) + numpy.sum(b*p2) + numpy.sum(c*p3),3),-3)
         return action
     
     def load_policy(self):
