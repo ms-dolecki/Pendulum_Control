@@ -272,7 +272,7 @@ c = np.zeros((4,4,4)).tolist()
 #                #input_data_scaled,output_data = my_Pilco_learn.add_policy_data(policy,input_data_scaled,output_data)
 #                print(a,b,c)
 
-for index in range(10):
+for index in range(20):
     a = np.random.uniform(-100, 100, size=(4)).tolist()
     b = np.random.uniform(-10, 10, size=(4,4)).tolist()
     c = np.random.uniform(-1, 1, size=(4,4,4)).tolist()
@@ -291,7 +291,7 @@ for index in range(10):
 input_data,output_data = my_Pilco_learn.load_data_2("model.txt")
 model = gpflow.models.GPR(data=(np.array(input_data[:100]), np.array(output_data[:100])), kernel=kernel)
 optimizer = gpflow.optimizers.Scipy()
-for batch_number in range(9):
+for batch_number in range(19):
     input_batch = np.array(input_data[batch_number*100:(batch_number+1)*100])
     output_batch = np.array(output_data[batch_number*100:(batch_number+1)*100])
     print("test")
@@ -358,5 +358,7 @@ def objective_function(initial_guess):
     }
     return my_Pilco_learn.evaluate_policy(policy,scaler,model)
 
-best_policy = minimize(objective_function,initial_guess, method='Powell')
+best_policy = minimize(objective_function,initial_guess, method='Nelder-Mead',options={
+                      'xtol': 100,  # More lenient tolerance for x
+                      'ftol': 100})
 print(best_policy)
