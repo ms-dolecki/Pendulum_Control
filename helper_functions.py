@@ -70,6 +70,7 @@ class Pendulum_Variables:
         # base motion
         self.x = 0
         self.v = 0
+        self.write_data = True
         self.a_base = 0
         #self.policy_type = policy_type
         self.policy_vector = policy_v
@@ -174,7 +175,7 @@ class Pendulum_Variables:
             #print("d")
             #print(d)
             #if time.time() - self.sample_time > 0.1:
-            if time_1 - self.sample_time > 0.1: 
+            if time_1 - self.sample_time > 0.01: 
                 #a = self.policy_vector[0]
                 #b = self.policy_vector[1]
                 #c = self.policy_vector[2]
@@ -193,6 +194,7 @@ class Pendulum_Variables:
         if abs(self.x) > 3:
             self.a_base = 0
             self.v = 0
+            self.write_data = False
         self.x += self.v*t+0.5*self.a_base*(t**2)
         self.v += self.a_base*t
         self.horizontal_acceleration = -self.a_base

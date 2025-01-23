@@ -11,9 +11,10 @@ import tensorflow as tf
 import json
 from itertools import combinations
 import random
+import math
 
 
-class Pilco_learn:
+class Pilco_Learn:
     class Watcher(FileSystemEventHandler):
         def __init__(self,pilco_learn):
             self.pilco_learn = pilco_learn
@@ -22,7 +23,11 @@ class Pilco_learn:
                 return
             self.pilco_learn.run_finish()
 
-    def __init__(self):
+    def __init__(self,model,input_data,output_data):
+        self.scaler = ""
+        self.input_data = input_data
+        self.output_data = output_data
+        self.model = model
         self.sim_iteration = 0
         path_to_watch = "sim_done.txt"  # Replace with your file or directory path
         event_handler = self.Watcher(self)
@@ -115,27 +120,28 @@ class Pilco_learn:
             data.write(str(delta_T)+","+str(x_input)+","+str(v_input)+","+str(theta_input)+","+str(theta_dot_input)+","+str(a_base)+","+str(x_output)+","+str(v_output)+","+str(theta_output)+","+str(theta_dot_output)+"\n")
         data.close()
 
-    def evaluate_policy(self,policy,scaler,gp):
-        time_step = 0.1
+    def evaluate_policy(self,policy,start_state):
+        time_step = 0.01
         total_time = 10
         delta_T = np.array([time_step])
-        current_state = np.array([1.0,0.0,0.02123817989101573,-0.009558798511813068])
+        current_state = start_state
+        #current_state = np.array([1.0,0.0,0.02123817989101573,-0.009558798511813068])
         #current_state = current_state.reshape(-1,1)
         #action = np.array([a*current_state[0]+b*current_state[1]+c*current_state[2]+d*current_state[3]])
         state_vector = [current_state[0],current_state[1],current_state[2],current_state[3]]
         action = np.array([self.calculate_action(state_vector,policy)])
         #print(np.concatenate((delta_T,current_state,action), axis=0))
         num_steps = int(total_time/time_step)
-        predicted_states = []
+        #predicted_states = []
         future_state = current_state
         trajectory = []
         output_data_file = "Pilco_trajectory.txt"
         output_data = open(output_data_file, "w")
         for _ in range(num_steps):
-            #output_data.write(str(time_step)+","+str(float(future_state[0]))+","+str(float(future_state[1]))+","+str(float(future_state[2]))+","+str(float(future_state[3]))+","+str(action)+"\n")
+            output_data.write(str(time_step)+","+str(float(future_state[0]))+","+str(float(future_state[1]))+","+str(float(future_state[2]))+","+str(float(future_state[3]))+","+str(action)+"\n")
             #future_state = gp.predict_f(scaler.transform([np.concatenate((delta_T,future_state,action), axis=0)]))[0][0]
             #print(np.array([np.concatenate((delta_T,future_state,action), axis=0)]))
-            future_state = gp.predict_f(np.array([np.concatenate((delta_T,future_state,action), axis=0)]))[0][0]
+            future_state = self.model.predict_f(np.array([np.concatenate((delta_T,future_state,action), axis=0)]))[0][0]
             #print(future_state[0][0,1])
             #print("action")
             #action = [a*future_state[0]+b*future_state[1]+c*future_state[2]+d*future_state[3]]
@@ -143,14 +149,14 @@ class Pilco_learn:
             action = np.array([self.calculate_action(state_vector,policy)])
             trajectory.append(future_state)
         output_data.close()
-        predicted_states.append(trajectory)
+        #predicted_states.append(trajectory)
             
             # Here, you would compute a cost function based on the predicted trajectory
             # For simplicity, let's assume a simple cost function:
-        cost = np.array([time_step*np.sum(np.array(trajectory)**2) for trajectory in predicted_states])
-        print("final_state")
-        print(future_state)
-        print("a:"+str(policy['a'])+"b:"+str(policy['b'])+"c:"+str(policy['c']))
+        cost = np.array([time_step*np.sum(np.array(trajectory)**2)])
+        #print("final_state")
+        #print(future_state)
+        #print("a:"+str(policy['a'])+"b:"+str(policy['b'])+"c:"+str(policy['c']))
         print("cost")
         print(cost)
         return cost
@@ -173,7 +179,7 @@ class Pilco_learn:
         reset.write(str(num))
         reset.close()
         
-    def add_policy_data(self,policy,input_data,output_data):
+    def add_policy_data(self,policy,model_file):
         self.write_policy(policy)
         current_sim_iteration = self.sim_iteration
         self.reset_sim(1)
@@ -190,18 +196,18 @@ class Pilco_learn:
         #input_data_scaled = scaler.fit_transform(input_data)
         #input_data_scaled = input_data
         #rows,columns = input_data.shape()
-        if input_data is not None:
-            input_data = np.vstack((input_data, input_data_1))
-            output_data = np.vstack((output_data, output_data_1))
+        if self.input_data is not None:
+            self.input_data = np.vstack((self.input_data, input_data_1))
+            self.output_data = np.vstack((self.output_data, output_data_1))
         else:
-            input_data = input_data_1
-            output_data = output_data_1
+            self.input_data = input_data_1
+            self.output_data = output_data_1
         
-        input_output_data = np.hstack((input_data,output_data))
+        input_output_data = np.hstack((self.input_data,self.output_data))
         np.random.shuffle(input_output_data)
-        self.save_model_data(input_output_data,"model.txt")
-        input_data = input_output_data[:,:6]
-        output_data = input_output_data[:,6:10]
+        self.save_model_data(input_output_data,model_file)
+        self.input_data = input_output_data[:,:6]
+        self.output_data = input_output_data[:,6:10]
         # Set up the GP kernel (RBF kernel + constant kernel)
         #kernel = C(1.0, (1e-6, 15)) * RBF(1.0, (1e-6, 15))
         # Initialize GP regressor
@@ -218,9 +224,9 @@ class Pilco_learn:
         # Optimize the model
         #optimizer = gpflow.optimizers.Scipy()
         #optimizer.minimize(model.training_loss, model.trainable_variables, options=dict(maxiter=100))
-        return input_data,output_data
+        #return input_data,output_data
 
-my_Pilco_learn = Pilco_learn()
+
 #my_Pilco_learn.write_policy(7.2,5.76,80,-30)
 #my_Pilco_learn.reset_sim(1)
 #print("simulation_reset")
@@ -245,9 +251,11 @@ scaler = ""
 # Define a kernel (RBF kernel with a constant factor)
 kernel = gpflow.kernels.SquaredExponential()
 # Create a GP model
-input_data_scaled = None
+input_data = None
 output_data = None
-model = None
+#model = None
+model = gpflow.models.GPR(data=(np.array([[]]), np.array([[]])), kernel=kernel)
+my_pilco_learn = Pilco_Learn(model,input_data,output_data)
 #model = gpflow.models.GPR(data=(np.array([input_data_scaled]), np.array(output_data)), kernel=kernel)
 # Optimize the model
 #optimizer = gpflow.optimizers.Scipy()
@@ -271,10 +279,10 @@ c = np.zeros((4,4,4)).tolist()
 #                    "b":b,
 #                    "c":c
 #                }
-#                #input_data_scaled,output_data = my_Pilco_learn.add_policy_data(policy,input_data_scaled,output_data)
+#                my_pilco_learn.add_policy_data(policy,"model.txt")
 #                print(a,b,c)
 
-for index in range(20):
+for index in range(80):
     a = np.random.uniform(-100, 100, size=(4)).tolist()
     b = np.random.uniform(-10, 10, size=(4,4)).tolist()
     c = np.random.uniform(-1, 1, size=(4,4,4)).tolist()
@@ -284,30 +292,34 @@ for index in range(20):
                     "c":c
     }
     print(a,b,c)
-    #input_data_scaled,output_data = my_Pilco_learn.add_policy_data(policy,input_data_scaled,output_data)
+    #my_pilco_learn.add_policy_data(policy,"model.txt")
 #tf.saved_model.save(model, 'gpflow_model')
 #model = tf.saved_model.load('gpflow_model')
 #model = gpflow.models.load_model('gpflow_model')
-#input_data,output_data = my_Pilco_learn.load_data_2("model.txt")
+#input_data,output_data = my_pilco_learn.load_data_2("model.txt")
 #model = gpflow.models.GPR(data=(np.array(input_data), np.array(output_data)), kernel=kernel)
-input_data,output_data = my_Pilco_learn.load_data_2("model.txt")
-model = gpflow.models.GPR(data=(np.array(input_data[:100]), np.array(output_data[:100])), kernel=kernel)
+input_data,output_data = my_pilco_learn.load_data_2("model.txt")
+my_pilco_learn.input_data = input_data
+my_pilco_learn.output_data = output_data
+#my_pilco_learn.kernel = kernel
+#my_pilco_learn.model = gpflow.models.GPR(data=(np.array(input_data[:100]), np.array(output_data[:100])), kernel=my_pilco_learn.kernel)
 optimizer = gpflow.optimizers.Scipy()
-for batch_number in range(19):
-    input_batch = np.array(input_data[batch_number*100:(batch_number+1)*100])
-    output_batch = np.array(output_data[batch_number*100:(batch_number+1)*100])
+batches = math.floor(len(input_data)/400)
+for batch_number in range(batches):
+    input_batch = np.array(input_data[batch_number*200:(batch_number+1)*400])
+    output_batch = np.array(output_data[batch_number*200:(batch_number+1)*400])
     print("test")
     print(batch_number)
         
     # Update the entire dataset for this iteration. 
     # Note: This might not be necessary if you're only updating with the batch
     # model.data = (X_batch, Y_batch)
-    model.data = (input_batch, output_batch)
+    my_pilco_learn.model.data = (input_batch, output_batch)
     # Instead, use a closure for the current batch:
-    closure = model.training_loss_closure()
+    closure = my_pilco_learn.model.training_loss_closure()
         
     # Optimize using the batch
-    optimizer.minimize(closure, variables=model.trainable_variables, options=dict(maxiter=10))
+    optimizer.minimize(closure, variables=my_pilco_learn.model.trainable_variables, options=dict(maxiter=10))
     #time.sleep(5)
     
 #a,b,c,d = 7.2,5.76,80,-30
@@ -359,7 +371,7 @@ def objective_function(initial_guess):
     "b" : np.array(initial_guess[4:20]).reshape((4,4)).tolist(),
     "c" : np.array(initial_guess[20:]).reshape((4,4,4)).tolist()
     }
-    return my_Pilco_learn.evaluate_policy(policy,scaler,model)
+    return my_pilco_learn.evaluate_policy(policy,np.array([1.0,0.0,0.02123817989101573,-0.009558798511813068]))
 
 def calculate_cost(policy):
     flat_policy = []
@@ -369,9 +381,7 @@ def calculate_cost(policy):
     return cost
 
 class Genetic_Algorithm:
-    def __init__(self, pilco_learn, scaler, model):
-        self.scaler = scaler
-        self.model = model
+    def __init__(self, pilco_learn):
         self.pilco_learn = pilco_learn
         self.population = []
         self.individuals_birthed = 0
@@ -386,13 +396,13 @@ class Genetic_Algorithm:
             self.genetic_algorithm = genetic_algorithm
             self.policy = policy
             self.id = id
-            self.cost = self.genetic_algorithm.calculate_cost(policy, self.genetic_algorithm.scaler, self.genetic_algorithm.model)
+            self.cost = self.genetic_algorithm.calculate_cost(policy)
 
-    def calculate_cost(self, policy, scaler, model):
+    def calculate_cost(self, policy):
         flat_policy = []
         for value in policy.values():
             flat_policy.extend(self.flatten_list(value))
-        cost = self.objective_function(flat_policy, scaler, model)
+        cost = self.objective_function(flat_policy)
         return cost
 
     def flatten_list(self, nested_list):
@@ -407,16 +417,17 @@ class Genetic_Algorithm:
                 flat_list.append(item)
         return flat_list
 
-    def objective_function(self, initial_guess, scaler, model):
+    def objective_function(self, initial_guess):
         policy = {
             "a" : initial_guess[:4],
             "b" : np.array(initial_guess[4:20]).reshape((4,4)).tolist(),
             "c" : np.array(initial_guess[20:]).reshape((4,4,4)).tolist()
         }
-        return self.pilco_learn.evaluate_policy(policy,scaler,model)
+        return self.pilco_learn.evaluate_policy(policy,np.array([1.0,0.0,0.02123817989101573,-0.009558798511813068]))
     
     def add_individual(self, policy):
         new_individual = self.Individual(self, policy, self.individuals_birthed + 1)
+        self.pilco_learn.add_policy_data(policy,"model.txt")
         self.population.append(new_individual)
         self.individuals_birthed += 1
 
@@ -454,10 +465,10 @@ class Genetic_Algorithm:
         for pair in pairs:
             self.mate(pair[0],pair[1])
     
-my_genetic_algorithm = Genetic_Algorithm(my_Pilco_learn, scaler, model)
+my_genetic_algorithm = Genetic_Algorithm(my_pilco_learn)
 
 #population = []
-for index in range(20):
+for index in range(40):
     a = np.random.uniform(-100, 100, size=(4)).tolist()
     b = np.random.uniform(-10, 10, size=(4,4)).tolist()
     c = np.random.uniform(-1, 1, size=(4,4,4)).tolist()
@@ -473,9 +484,33 @@ for index in range(20):
 
 print("gen1")
 my_genetic_algorithm.print_population()
-my_genetic_algorithm.new_generation(20)
-print("gen2")
-my_genetic_algorithm.print_population()
+for index in range(25):
+    input_data,output_data = my_pilco_learn.load_data_2("model.txt")
+    #my_pilco_learn.input_data = input_data
+    #my_pilco_learn.output_data = output_data
+    #my_pilco_learn.kernel = kernel
+    #my_pilco_learn.model = gpflow.models.GPR(data=(np.array(input_data[:100]), np.array(output_data[:100])), kernel=my_pilco_learn.kernel)
+    optimizer = gpflow.optimizers.Scipy()
+    batches = math.floor(len(input_data)/400)
+    for batch_number in range(batches):
+        input_batch = np.array(input_data[batch_number*400:(batch_number+1)*400])
+        output_batch = np.array(output_data[batch_number*400:(batch_number+1)*400])
+        print("test")
+        print(batch_number)
+            
+        # Update the entire dataset for this iteration. 
+        # Note: This might not be necessary if you're only updating with the batch
+        # model.data = (X_batch, Y_batch)
+        my_pilco_learn.model.data = (input_batch, output_batch)
+        # Instead, use a closure for the current batch:
+        closure = my_pilco_learn.model.training_loss_closure()
+            
+        # Optimize using the batch
+        optimizer.minimize(closure, variables=my_pilco_learn.model.trainable_variables, options=dict(maxiter=10))
+
+    my_genetic_algorithm.new_generation(250 - index*10)
+    print("gen: "+str(index))
+    my_genetic_algorithm.print_population()
 
 #best_policy = minimize(objective_function,initial_guess, method='Nelder-Mead',options={
 #                      'xtol': 100,  # More lenient tolerance for x
