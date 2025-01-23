@@ -9,6 +9,8 @@ from watchdog.events import FileSystemEventHandler
 import time
 import tensorflow as tf
 import json
+from itertools import combinations
+import random
 
 
 class Pilco_learn:
@@ -282,7 +284,7 @@ for index in range(20):
                     "c":c
     }
     print(a,b,c)
-    input_data_scaled,output_data = my_Pilco_learn.add_policy_data(policy,input_data_scaled,output_data)
+    #input_data_scaled,output_data = my_Pilco_learn.add_policy_data(policy,input_data_scaled,output_data)
 #tf.saved_model.save(model, 'gpflow_model')
 #model = tf.saved_model.load('gpflow_model')
 #model = gpflow.models.load_model('gpflow_model')
@@ -345,6 +347,7 @@ def flatten_list(nested_list):
             flat_list.append(item)
     return flat_list
 
+
 # Flatten the values, ignoring keys
 initial_guess = []
 for value in policy.values():
@@ -358,7 +361,123 @@ def objective_function(initial_guess):
     }
     return my_Pilco_learn.evaluate_policy(policy,scaler,model)
 
-best_policy = minimize(objective_function,initial_guess, method='Nelder-Mead',options={
-                      'xtol': 100,  # More lenient tolerance for x
-                      'ftol': 100})
-print(best_policy)
+def calculate_cost(policy):
+    flat_policy = []
+    for value in policy.values():
+        flat_policy.extend(flatten_list(value))
+    cost = objective_function(flat_policy)
+    return cost
+
+class Genetic_Algorithm:
+    def __init__(self, pilco_learn, scaler, model):
+        self.scaler = scaler
+        self.model = model
+        self.pilco_learn = pilco_learn
+        self.population = []
+        self.individuals_birthed = 0
+
+    class Population:
+        def __init__(self, genetic_algorithm):
+            self.genetic_algorithm = genetic_algorithm
+            self.individuals = []
+
+    class Individual:
+        def __init__(self, genetic_algorithm, policy, id):
+            self.genetic_algorithm = genetic_algorithm
+            self.policy = policy
+            self.id = id
+            self.cost = self.genetic_algorithm.calculate_cost(policy, self.genetic_algorithm.scaler, self.genetic_algorithm.model)
+
+    def calculate_cost(self, policy, scaler, model):
+        flat_policy = []
+        for value in policy.values():
+            flat_policy.extend(self.flatten_list(value))
+        cost = self.objective_function(flat_policy, scaler, model)
+        return cost
+
+    def flatten_list(self, nested_list):
+        """
+        Recursively flatten a nested list structure into a single list.
+        """
+        flat_list = []
+        for item in nested_list:
+            if isinstance(item, (list, tuple)):
+                flat_list.extend(flatten_list(item))
+            else:
+                flat_list.append(item)
+        return flat_list
+
+    def objective_function(self, initial_guess, scaler, model):
+        policy = {
+            "a" : initial_guess[:4],
+            "b" : np.array(initial_guess[4:20]).reshape((4,4)).tolist(),
+            "c" : np.array(initial_guess[20:]).reshape((4,4,4)).tolist()
+        }
+        return self.pilco_learn.evaluate_policy(policy,scaler,model)
+    
+    def add_individual(self, policy):
+        new_individual = self.Individual(self, policy, self.individuals_birthed + 1)
+        self.population.append(new_individual)
+        self.individuals_birthed += 1
+
+    def print_population(self):
+        for individual in self.population:
+            print(individual.cost)
+            print(individual.policy)
+
+    def mate(self, individual_1, individual_2):
+        flat_policy_1 = []
+        flat_policy_2 = []
+        flat_policy_new = []
+        for value in individual_1.policy.values():
+            flat_policy_1.extend(self.flatten_list(value))
+        for value in individual_2.policy.values():
+            flat_policy_2.extend(self.flatten_list(value))
+        for index in range(len(flat_policy_1)):
+            allele = random.randint(1, 2)
+            mutation_factor = np.random.normal(loc=1, scale=0.05)
+            if allele == 1:
+                flat_policy_new.append(flat_policy_1[index]*mutation_factor)
+            else:
+                flat_policy_new.append(flat_policy_2[index]*mutation_factor)
+        policy_new = {
+            "a" : flat_policy_new[:4],
+            "b" : np.array(flat_policy_new[4:20]).reshape((4,4)).tolist(),
+            "c" : np.array(flat_policy_new[20:]).reshape((4,4,4)).tolist()
+        }
+        self.add_individual(policy_new)
+        
+    def new_generation(self, survival_threshold):
+        surviving_population = [individual for individual in self.population if individual.cost < survival_threshold]
+        self.population = surviving_population
+        pairs = [comb for comb in combinations(surviving_population, 2)]
+        for pair in pairs:
+            self.mate(pair[0],pair[1])
+    
+my_genetic_algorithm = Genetic_Algorithm(my_Pilco_learn, scaler, model)
+
+#population = []
+for index in range(20):
+    a = np.random.uniform(-100, 100, size=(4)).tolist()
+    b = np.random.uniform(-10, 10, size=(4,4)).tolist()
+    c = np.random.uniform(-1, 1, size=(4,4,4)).tolist()
+    policy = {
+                    "a":a,
+                    "b":b,
+                    "c":c
+    }
+    my_genetic_algorithm.add_individual(policy)
+    #population.append(policy)
+    #print(a,b,c)
+    #input_data_scaled,output_data = my_Pilco_learn.add_policy_data(policy,input_data_scaled,output_data)
+
+print("gen1")
+my_genetic_algorithm.print_population()
+my_genetic_algorithm.new_generation(20)
+print("gen2")
+my_genetic_algorithm.print_population()
+
+#best_policy = minimize(objective_function,initial_guess, method='Nelder-Mead',options={
+#                      'xtol': 100,  # More lenient tolerance for x
+#                      'ftol': 100})
+#print(best_policy)
