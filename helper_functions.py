@@ -140,8 +140,8 @@ class Pendulum_Variables:
         self.data_file = open(file_name, 'w')
 
     def update(self):
-        #time_1 = time.time()
-        time_1 = self.time_0 + 0.001
+        time_1 = time.time()
+        #time_1 = self.time_0 + 0.001
         t = time_1 - self.time_0
         
         # accelerate base to follow cursor
@@ -223,7 +223,7 @@ class Pendulum_Variables:
         #print(time_1)
         #print("self.initial_time")
         #print(self.initial_time)
-        if time_1 - self.initial_time > 10:
+        if time_1 - self.initial_time > 5:
             self.running = False
             self.data_file.close()
             print("run done")
