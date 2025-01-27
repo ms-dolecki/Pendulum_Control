@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.optimize import minimize
+#from scipy.optimize import minimize
 import gpflow
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
@@ -13,17 +13,20 @@ from itertools import combinations
 import random
 import math
 from itertools import combinations_with_replacement
+import threading
+from watchfiles import watch, Change
+#gpflow.config.set_default_float(tf.float32)
 #tf.config.run_functions_eagerly(True)
 
 
 class Pilco_Learn:
-    class Watcher(FileSystemEventHandler):
-        def __init__(self,pilco_learn):
-            self.pilco_learn = pilco_learn
-        def on_modified(self, event):
-            if event.is_directory:
-                return
-            self.pilco_learn.run_finish()
+    #class Watcher(FileSystemEventHandler):
+    #    def __init__(self,pilco_learn):
+    #        self.pilco_learn = pilco_learn
+    #    def on_modified(self, event):
+    #        if event.is_directory:
+    #            return
+    #        self.pilco_learn.run_finish()
 
     def __init__(self,model,scaler_x, scaler_y,input_data,output_data):
         self.scaler_x = scaler_x
@@ -33,10 +36,26 @@ class Pilco_Learn:
         self.model = model
         self.sim_iteration = 0
         path_to_watch = "sim_done.txt"  # Replace with your file or directory path
-        event_handler = self.Watcher(self)
-        observer = Observer()
-        observer.schedule(event_handler, path=path_to_watch, recursive=False)  # Set recursive=True to monitor subdirectories
-        observer.start()
+        watcher_thread = threading.Thread(target=self.file_watcher, args=[path_to_watch], daemon=True)
+        watcher_thread.start()
+        #event_handler = self.Watcher(self)
+        #observer = Observer()
+        #observer.schedule(event_handler, path=path_to_watch, recursive=False)  # Set recursive=True to monitor subdirectories
+        #observer.start()
+
+    def file_watcher(self, path_to_watch):
+        deletion_stop_event = threading.Event()
+        while True:
+            for changes in watch(path_to_watch, stop_event=deletion_stop_event):
+                for change_type, path in changes:
+                    if change_type == Change.deleted:
+                        deletion_stop_event.set()
+                        time.sleep(2)
+                    print(f"{Change(change_type).name} {path}")
+                    self.run_finish()
+            print("exited for loop")
+            deletion_stop_event.clear()
+                
 
     def vector_square(self,vector):
         output = []
@@ -44,11 +63,19 @@ class Pilco_Learn:
             output.append([element*element1 for element1 in vector])
         return output
     
+    @tf.functon
+    def vector_square_tf(self,vector):
+        return tf.tensordot(vector, vector, axes=0)
+    
     def vector_cube(self,vector):
         output = []
         for element in vector:
             output.append([[element*element1 for element1 in row] for row in self.vector_square(vector)])
         return output
+    
+    @tf.function
+    def vector_cube_tf(self,vector):
+        return tf.tensordot(vector, self.vector_square_tf(vector), axes=0)
     
     def calculate_action(self, state, policy):
         p = np.array(state)
@@ -60,6 +87,14 @@ class Pilco_Learn:
         action = max(min(np.sum(a*p) + np.sum(b*p2) + np.sum(c*p3),3),-3)
         return action
     
+    @tf.function
+    def calculate_action_tf(self, state, a, b, c):
+        p = state
+        p2 = self.vector_square(state)
+        p3 = self.vector_cube(state)
+        action = tf.reduce_sum(a*p) + tf.reduce_sum(b*p2) + tf.reduce_sum(c*p3)
+        return tf.clip_by_value(action,-3,3)
+    
     def run_finish(self):
         print("run_finish")
         self.sim_iteration += 1
@@ -70,6 +105,7 @@ class Pilco_Learn:
         input_data = []
         output_data = []
         for ln in data:
+            print(ln)
             ln.strip()
             ln = ln.strip("\n").split(",")
             delta_T = float(ln[0].strip())
@@ -123,6 +159,7 @@ class Pilco_Learn:
             data.write(str(delta_T)+","+str(x_input)+","+str(v_input)+","+str(theta_input)+","+str(theta_dot_input)+","+str(a_base)+","+str(x_output)+","+str(v_output)+","+str(theta_output)+","+str(theta_dot_output)+"\n")
         data.close()
 
+
     def evaluate_policy(self,policy,start_state):
         time_step = 0.01
         total_time = 5
@@ -141,9 +178,9 @@ class Pilco_Learn:
         future_state = current_state
         trajectory = []
         output_data_file = "Pilco_trajectory.txt"
-        output_data = open(output_data_file, "w")
+        #output_data = open(output_data_file, "w")
         for _ in range(num_steps):
-            output_data.write(str(time_step)+","+str(float(future_state[0]))+","+str(float(future_state[1]))+","+str(float(future_state[2]))+","+str(float(future_state[3]))+","+str(action[0])+"\n")
+            #output_data.write(str(time_step)+","+str(float(future_state[0]))+","+str(float(future_state[1]))+","+str(float(future_state[2]))+","+str(float(future_state[3]))+","+str(action[0])+"\n")
             #print(self.scaler.transform([np.concatenate((delta_T,future_state,action), axis=0)]))
             #tf.config.run_functions_eagerly(True)
             scaled_current_state = tf.convert_to_tensor(self.scaler_x.transform([np.concatenate((delta_T,future_state,action), axis=0)]))
@@ -162,7 +199,7 @@ class Pilco_Learn:
             #print("action")
             #print(action)
             trajectory.append(future_state)
-        output_data.close()
+        #output_data.close()
         #predicted_states.append(trajectory)
             
             # Here, you would compute a cost function based on the predicted trajectory
@@ -175,6 +212,8 @@ class Pilco_Learn:
         print(cost)
         return cost
 
+    @tf.function
+    def evaluate_policies(self, a_tensor, b_tensor, c_tensor, )
     def write_policy(self,policy):
         policy_file = "policy_config.txt"
         with open(policy_file, 'w') as file:
@@ -196,10 +235,12 @@ class Pilco_Learn:
     def add_policy_data(self,policy,model_file):
         self.write_policy(policy)
         current_sim_iteration = self.sim_iteration
-        self.reset_sim(1)
-        #print("simulation_reset")
+        self.reset_sim(current_sim_iteration)
+        print("simulation_reset")
+        print(current_sim_iteration)
         while self.sim_iteration == current_sim_iteration:
-            #print(self.sim_iteration)
+            print(self.sim_iteration)
+            time.sleep(2)
             pass
         print(self.sim_iteration)
 
@@ -316,8 +357,8 @@ for index in range(10):
 #input_data,output_data = my_pilco_learn.load_data_2("model.txt")
 #model = gpflow.models.GPR(data=(np.array(input_data), np.array(output_data)), kernel=kernel)
 input_data,output_data = my_pilco_learn.load_data_2("model.txt")
-input_data_scaled = my_pilco_learn.scaler_x.fit_transform(np.array(input_data))
-output_data_scaled = my_pilco_learn.scaler_y.fit_transform(np.array(output_data))
+input_data_scaled = tf.convert_to_tensor(my_pilco_learn.scaler_x.fit_transform(np.array(input_data)), dtype=tf.float64)
+output_data_scaled = tf.convert_to_tensor(my_pilco_learn.scaler_y.fit_transform(np.array(output_data)), dtype=tf.float64)
 print(input_data_scaled)
 #input_data_scaled = input_data
 my_pilco_learn.input_data = input_data
@@ -511,8 +552,8 @@ print("gen1")
 my_genetic_algorithm.print_population()
 for index in range(25):
     input_data,output_data = my_pilco_learn.load_data_2("model.txt")
-    input_data_scaled = my_pilco_learn.scaler_x.fit_transform(np.array(input_data))
-    output_data_scaled = my_pilco_learn.scaler_y.fit_transform(np.array(output_data))
+    input_data_scaled = tf.convert_to_tensor(my_pilco_learn.scaler_x.fit_transform(np.array(input_data)), dtype=tf.float64)
+    output_data_scaled = tf.convert_to_tensor(my_pilco_learn.scaler_y.fit_transform(np.array(output_data)), dtype=tf.float64)
     #my_pilco_learn.model.data = (input_data_scaled, output_data)
     #my_pilco_learn.input_data = input_data
     #my_pilco_learn.output_data = output_data

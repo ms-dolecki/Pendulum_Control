@@ -1,0 +1,3 @@
+sudo apt-get install openssh-client openssh-server -y
+sudo cp sshd_config /etc/ssh/sshd_config
+sudo service ssh restart

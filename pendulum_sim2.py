@@ -8,6 +8,7 @@ import serial
 from copy import deepcopy
 import json
 
+
 # get options from command line
 parser = argparse.ArgumentParser(
                     prog='Pendulum_Sim',

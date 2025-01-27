@@ -138,6 +138,7 @@ class Pendulum_Variables:
     
     def open_file(self,file_name):
         self.data_file = open(file_name, 'w')
+        self.data_file.close()
 
     def update(self):
         time_1 = time.time()
@@ -187,7 +188,9 @@ class Pendulum_Variables:
                 self.a_base = self.calculate_action(state_vector, self.policy_vector)
                 #self.a_base = a*self.x+b*self.v+c*(3.14159/2 - (self.angles_vector[0][0] % 6.28318))+d*self.angle_dots_vector[0][0]
                 #self.data_file.write(str(time.time()-self.sample_time)+","+str(self.x)+","+str(self.v)+","+str((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
+                self.data_file = open("data.txt", 'a')
                 self.data_file.write(str(time_1-self.sample_time)+","+str(self.x)+","+str(self.v)+","+str((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
+                self.data_file.close()
                 #self.sample_time = time.time()
                 self.sample_time = time_1
         #print(a_base)
