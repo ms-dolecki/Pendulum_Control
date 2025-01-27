@@ -157,7 +157,7 @@ class Pendulum_Variables:
         #print("yo2")
         #print(self.policy_vector[4])
         #if str(self.policy_type) == "proportional":
-        if True:
+        if self.write_data:
             #print("in")
             #self.a_base = self.policy_vector[0]*(self.policy_vector[1]*(self.policy_vector[2]*(self.x+self.policy_vector[3]*self.v) + 3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318) - self.policy_vector[4]*self.angle_dots_vector[0][0])
             #print(self.policy_vector[1])
@@ -195,9 +195,11 @@ class Pendulum_Variables:
             self.a_base = 0
             self.v = 0
             self.write_data = False
-        self.x += self.v*t+0.5*self.a_base*(t**2)
-        self.v += self.a_base*t
-        self.horizontal_acceleration = -self.a_base
+        else:
+            self.x += self.v*t+0.5*self.a_base*(t**2)
+            self.v += self.a_base*t
+            self.horizontal_acceleration = -self.a_base
+            self.write_data = True
         
         # set external acceleration as if base were stationary
         self.external_acceleration_v = [self.horizontal_acceleration, -9.81]

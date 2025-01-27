@@ -12,6 +12,7 @@ import json
 from itertools import combinations
 import random
 import math
+from itertools import combinations_with_replacement
 #tf.config.run_functions_eagerly(True)
 
 
@@ -24,8 +25,9 @@ class Pilco_Learn:
                 return
             self.pilco_learn.run_finish()
 
-    def __init__(self,model,scaler,input_data,output_data):
-        self.scaler = scaler
+    def __init__(self,model,scaler_x, scaler_y,input_data,output_data):
+        self.scaler_x = scaler_x
+        self.scaler_y = scaler_y
         self.input_data = input_data
         self.output_data = output_data
         self.model = model
@@ -131,6 +133,8 @@ class Pilco_Learn:
         #action = np.array([a*current_state[0]+b*current_state[1]+c*current_state[2]+d*current_state[3]])
         state_vector = [current_state[0],current_state[1],current_state[2],current_state[3]]
         action = np.array([self.calculate_action(state_vector,policy)])
+        #print("action")
+        #print(action)
         #print(np.concatenate((delta_T,current_state,action), axis=0))
         num_steps = int(total_time/time_step)
         #predicted_states = []
@@ -142,10 +146,12 @@ class Pilco_Learn:
             output_data.write(str(time_step)+","+str(float(future_state[0]))+","+str(float(future_state[1]))+","+str(float(future_state[2]))+","+str(float(future_state[3]))+","+str(action[0])+"\n")
             #print(self.scaler.transform([np.concatenate((delta_T,future_state,action), axis=0)]))
             #tf.config.run_functions_eagerly(True)
-            scaled_current_state = tf.convert_to_tensor(self.scaler.transform([np.concatenate((delta_T,future_state,action), axis=0)]))
+            scaled_current_state = tf.convert_to_tensor(self.scaler_x.transform([np.concatenate((delta_T,future_state,action), axis=0)]))
             #tf.config.run_functions_eagerly(False)
             #print(scaled_current_state)
-            future_state = self.model.predict_f(scaled_current_state)[0][0]
+            scaled_future_state = self.model.predict_f(scaled_current_state)[0][0]
+            future_state = self.scaler_y.inverse_transform(np.array([scaled_future_state]))[0]
+            #print(future_state)
             #print(np.array([np.concatenate((delta_T,future_state,action), axis=0)]))
             #future_state = self.model.predict_f(np.array([np.concatenate((delta_T,future_state,action), axis=0)]))[0][0]
             #print(future_state[0][0,1])
@@ -153,6 +159,8 @@ class Pilco_Learn:
             #action = [a*future_state[0]+b*future_state[1]+c*future_state[2]+d*future_state[3]]
             state_vector = [future_state[0],future_state[1],future_state[2],future_state[3]]
             action = np.array([self.calculate_action(state_vector,policy)])
+            #print("action")
+            #print(action)
             trajectory.append(future_state)
         output_data.close()
         #predicted_states.append(trajectory)
@@ -255,14 +263,16 @@ class Pilco_Learn:
 #gp.fit(input_data_scaled, output_data)
 #print("fitted_model")
 # Define a kernel (RBF kernel with a constant factor)
-kernel = gpflow.kernels.SquaredExponential()
+#kernel = gpflow.kernels.SquaredExponential()
+kernel = gpflow.kernels.Matern12()
 # Create a GP model
 input_data = None
 output_data = None
 #model = None
 model = gpflow.models.GPR(data=(np.array([[]]), np.array([[]])), kernel=kernel)
-scaler = StandardScaler()
-my_pilco_learn = Pilco_Learn(model,scaler,input_data,output_data)
+scaler_x = StandardScaler()
+scaler_y = StandardScaler()
+my_pilco_learn = Pilco_Learn(model,scaler_x,scaler_y,input_data,output_data)
 #model = gpflow.models.GPR(data=(np.array([input_data_scaled]), np.array(output_data)), kernel=kernel)
 # Optimize the model
 #optimizer = gpflow.optimizers.Scipy()
@@ -306,18 +316,19 @@ for index in range(10):
 #input_data,output_data = my_pilco_learn.load_data_2("model.txt")
 #model = gpflow.models.GPR(data=(np.array(input_data), np.array(output_data)), kernel=kernel)
 input_data,output_data = my_pilco_learn.load_data_2("model.txt")
-input_data_scaled = my_pilco_learn.scaler.fit_transform(np.array(input_data))
+input_data_scaled = my_pilco_learn.scaler_x.fit_transform(np.array(input_data))
+output_data_scaled = my_pilco_learn.scaler_y.fit_transform(np.array(output_data))
 print(input_data_scaled)
 #input_data_scaled = input_data
 my_pilco_learn.input_data = input_data
 my_pilco_learn.output_data = output_data
 #my_pilco_learn.kernel = kernel
-my_pilco_learn.model = gpflow.models.GPR(data=(input_data_scaled, np.array(output_data)), kernel=kernel)
+my_pilco_learn.model = gpflow.models.GPR(data=(input_data_scaled, output_data_scaled), kernel=kernel)
 optimizer = gpflow.optimizers.Scipy()
 batches = math.floor(len(input_data_scaled)/100)
 for batch_number in range(batches):
     input_batch = np.array(input_data_scaled[batch_number*100:(batch_number+1)*100])
-    output_batch = np.array(output_data[batch_number*100:(batch_number+1)*100])
+    output_batch = np.array(output_data_scaled[batch_number*100:(batch_number+1)*100])
     print("test")
     print(batch_number)
         
@@ -438,7 +449,8 @@ class Genetic_Algorithm:
     
     def add_individual(self, policy):
         new_individual = self.Individual(self, policy, self.individuals_birthed + 1)
-        self.pilco_learn.add_policy_data(policy,"model.txt")
+        if self.individuals_birthed % 10 == 0:
+            self.pilco_learn.add_policy_data(policy,"model.txt")
         self.population.append(new_individual)
         self.individuals_birthed += 1
 
@@ -470,16 +482,18 @@ class Genetic_Algorithm:
         self.add_individual(policy_new)
         
     def new_generation(self, survival_threshold):
-        surviving_population = [individual for individual in self.population if individual.cost < survival_threshold]
-        self.population = surviving_population
-        pairs = [comb for comb in combinations(surviving_population, 2)]
+        #surviving_population = [individual for individual in self.population if individual.cost < survival_threshold]
+        surviving_population = sorted(self.population, key=lambda x: x.cost)[:survival_threshold]
+        #self.population = surviving_population
+        self.population = []
+        pairs = [comb for comb in combinations_with_replacement(surviving_population, 2)]
         for pair in pairs:
             self.mate(pair[0],pair[1])
     
 my_genetic_algorithm = Genetic_Algorithm(my_pilco_learn)
 
 #population = []
-for index in range(10):
+for index in range(20):
     a = np.random.uniform(-100, 100, size=(4)).tolist()
     b = np.random.uniform(-10, 10, size=(4,4)).tolist()
     c = np.random.uniform(-1, 1, size=(4,4,4)).tolist()
@@ -497,21 +511,22 @@ print("gen1")
 my_genetic_algorithm.print_population()
 for index in range(25):
     input_data,output_data = my_pilco_learn.load_data_2("model.txt")
-    input_data_scaled = my_pilco_learn.scaler.fit_transform(np.array(input_data))
+    input_data_scaled = my_pilco_learn.scaler_x.fit_transform(np.array(input_data))
+    output_data_scaled = my_pilco_learn.scaler_y.fit_transform(np.array(output_data))
     #my_pilco_learn.model.data = (input_data_scaled, output_data)
     #my_pilco_learn.input_data = input_data
     #my_pilco_learn.output_data = output_data
     my_pilco_learn.input_data = input_data
     my_pilco_learn.output_data = output_data
     #my_pilco_learn.kernel = kernel
-    my_pilco_learn.model = gpflow.models.GPR(data=(input_data_scaled, np.array(output_data)), kernel=kernel)
+    my_pilco_learn.model = gpflow.models.GPR(data=(input_data_scaled, output_data_scaled), kernel=kernel)
     #my_pilco_learn.kernel = kernel
     #my_pilco_learn.model = gpflow.models.GPR(data=(np.array(input_data[:100]), np.array(output_data[:100])), kernel=my_pilco_learn.kernel)
     optimizer = gpflow.optimizers.Scipy()
     batches = math.floor(len(input_data_scaled)/100)
     for batch_number in range(batches):
         input_batch = np.array(input_data_scaled[batch_number*100:(batch_number+1)*100])
-        output_batch = np.array(output_data[batch_number*100:(batch_number+1)*100])
+        output_batch = np.array(output_data_scaled[batch_number*100:(batch_number+1)*100])
         print("test")
         print(batch_number)
             
@@ -525,7 +540,7 @@ for index in range(25):
         # Optimize using the batch
         optimizer.minimize(closure, variables=my_pilco_learn.model.trainable_variables, options=dict(maxiter=10))
 
-    my_genetic_algorithm.new_generation(250 - index*10)
+    my_genetic_algorithm.new_generation(10)
     print("gen: "+str(index))
     my_genetic_algorithm.print_population()
 
