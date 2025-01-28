@@ -15,7 +15,7 @@ import math
 from itertools import combinations_with_replacement
 import threading
 from watchfiles import watch, Change
-#gpflow.config.set_default_float(tf.float32)
+gpflow.config.set_default_float(tf.float64)
 #tf.config.run_functions_eagerly(True)
 
 
@@ -31,6 +31,8 @@ class Pilco_Learn:
     def __init__(self,model,scaler_x, scaler_y,input_data,output_data):
         self.scaler_x = scaler_x
         self.scaler_y = scaler_y
+        self.scaler_x_tf = self.TFStandardScaler()
+        self.scaler_y_tf = self.TFStandardScaler()
         self.input_data = input_data
         self.output_data = output_data
         self.model = model
@@ -43,6 +45,34 @@ class Pilco_Learn:
         #observer.schedule(event_handler, path=path_to_watch, recursive=False)  # Set recursive=True to monitor subdirectories
         #observer.start()
 
+    class TFStandardScaler:
+        def __init__(self):
+            self.mean = None
+            self.var = None
+
+        @tf.function
+        def fit(self, X):
+            # Assuming X is a 2D tensor where each row is a sample
+            self.mean = tf.reduce_mean(X, axis=0)
+            self.var = tf.math.reduce_variance(X, axis=0)
+
+        @tf.function
+        def transform(self, X):
+            if self.mean is None or self.var is None:
+                raise ValueError("Scaler not fitted")
+            return (X - self.mean) / tf.sqrt(self.var + 1e-7)  # Adding small epsilon for numerical stability
+        
+        @tf.function
+        def inverse_transform(self, Y):
+            if self.mean is None or self.var is None:
+                raise ValueError("Scaler not fitted")
+            return (Y*tf.sqrt(self.var + 1e-7) + self.mean)  # Adding small epsilon for numerical stability
+
+        @tf.function
+        def fit_transform(self, X):
+            self.fit(X)
+            return self.transform(X)
+    
     def file_watcher(self, path_to_watch):
         deletion_stop_event = threading.Event()
         while True:
@@ -63,7 +93,7 @@ class Pilco_Learn:
             output.append([element*element1 for element1 in vector])
         return output
     
-    @tf.functon
+    @tf.function
     def vector_square_tf(self,vector):
         return tf.tensordot(vector, vector, axes=0)
     
@@ -85,13 +115,13 @@ class Pilco_Learn:
         b = np.array(policy["b"])
         c = np.array(policy["c"])
         action = max(min(np.sum(a*p) + np.sum(b*p2) + np.sum(c*p3),3),-3)
-        return action
+        return [action]
     
     @tf.function
     def calculate_action_tf(self, state, a, b, c):
         p = state
-        p2 = self.vector_square(state)
-        p3 = self.vector_cube(state)
+        p2 = self.vector_square_tf(state)
+        p3 = self.vector_cube_tf(state)
         action = tf.reduce_sum(a*p) + tf.reduce_sum(b*p2) + tf.reduce_sum(c*p3)
         return tf.clip_by_value(action,-3,3)
     
@@ -213,7 +243,61 @@ class Pilco_Learn:
         return cost
 
     @tf.function
-    def evaluate_policies(self, a_tensor, b_tensor, c_tensor, )
+    def evaluate_policies(self, start_state, a_tensor, b_tensor, c_tensor):
+        time_step = 0.01
+        total_time = 5
+        delta_T = tf.fill([tf.shape(a_tensor)[0]], time_step)
+        delta_T = tf.expand_dims(delta_T, axis=1)
+        #current_state = tf.stack(start_state*[tf.shape(a_tensor)[0]])
+        current_state = tf.tile(tf.expand_dims(start_state, 0), [tf.shape(a_tensor)[0], 1])
+        #state_vector = [current_state[0],current_state[1],current_state[2],current_state[3]]
+        print(current_state)
+        print(a_tensor)
+        action = tf.map_fn(lambda args: self.calculate_action_tf(*args), 
+                   (current_state, a_tensor, b_tensor, c_tensor),dtype=tf.float32)
+        action = tf.expand_dims(action, axis=1)
+        num_steps = int(total_time/time_step)
+        print("action")
+        print(action)
+        #predicted_states = []
+        future_state = current_state
+        #trajectory = []
+        trajectory = current_state
+        output_data_file = "Pilco_trajectory.txt"
+        #output_data = open(output_data_file, "w")
+        for _ in range(num_steps):
+            scaled_current_state = tf.cast(tf.convert_to_tensor(self.scaler_x_tf.transform(tf.concat([delta_T, future_state, action], axis=1))), tf.float64)
+            scaled_future_state = self.model.predict_f(scaled_current_state)
+            print("scaled_future_state")
+            print(scaled_future_state)
+            future_state = self.scaler_y_tf.inverse_transform(tf.cast(scaled_future_state, tf.float32))[0]
+            print("future_state")
+            print(future_state)
+            #print(future_state)
+            #print(np.array([np.concatenate((delta_T,future_state,action), axis=0)]))
+            #future_state = self.model.predict_f(np.array([np.concatenate((delta_T,future_state,action), axis=0)]))[0][0]
+            #print(future_state[0][0,1])
+            #print("action")
+            #action = [a*future_state[0]+b*future_state[1]+c*future_state[2]+d*future_state[3]]
+            #state_vector = [future_state[0],future_state[1],future_state[2],future_state[3]]
+            action = tf.map_fn(lambda args: self.calculate_action_tf(*args), 
+                   (future_state, a_tensor, b_tensor, c_tensor),dtype=tf.float32)
+            action = tf.expand_dims(action, axis=1)
+            #print("action")
+            #print(action)
+            #trajectory.append(future_state)
+            trajectory = tf.concat([trajectory, future_state], axis=0)
+        #output_data.close()
+        #predicted_states.append(trajectory)
+            
+            # Here, you would compute a cost function based on the predicted trajectory
+            # For simplicity, let's assume a simple cost function:
+        cost = time_step * tf.reduce_sum(tf.square(trajectory), axis=1)
+
+        print("cost")
+        print(cost)
+        return cost
+    
     def write_policy(self,policy):
         policy_file = "policy_config.txt"
         with open(policy_file, 'w') as file:
@@ -350,13 +434,15 @@ for index in range(10):
                     "c":c
     }
     print(a,b,c)
-    my_pilco_learn.add_policy_data(policy,"model.txt")
+    #my_pilco_learn.add_policy_data(policy,"model.txt")
 #tf.saved_model.save(model, 'gpflow_model')
 #model = tf.saved_model.load('gpflow_model')
 #model = gpflow.models.load_model('gpflow_model')
 #input_data,output_data = my_pilco_learn.load_data_2("model.txt")
 #model = gpflow.models.GPR(data=(np.array(input_data), np.array(output_data)), kernel=kernel)
 input_data,output_data = my_pilco_learn.load_data_2("model.txt")
+my_pilco_learn.scaler_x_tf.fit(tf.constant(input_data))
+my_pilco_learn.scaler_y_tf.fit(tf.constant(output_data))
 input_data_scaled = tf.convert_to_tensor(my_pilco_learn.scaler_x.fit_transform(np.array(input_data)), dtype=tf.float64)
 output_data_scaled = tf.convert_to_tensor(my_pilco_learn.scaler_y.fit_transform(np.array(output_data)), dtype=tf.float64)
 print(input_data_scaled)
@@ -459,7 +545,8 @@ class Genetic_Algorithm:
             self.genetic_algorithm = genetic_algorithm
             self.policy = policy
             self.id = id
-            self.cost = self.genetic_algorithm.calculate_cost(policy)
+            #self.cost = self.genetic_algorithm.calculate_cost(policy)
+            self.cost = 9999
 
     def calculate_cost(self, policy):
         flat_policy = []
@@ -494,6 +581,17 @@ class Genetic_Algorithm:
             self.pilco_learn.add_policy_data(policy,"model.txt")
         self.population.append(new_individual)
         self.individuals_birthed += 1
+
+    def calculate_population_costs(self):
+        a_tensor = tf.constant([],shape=(0,))
+        b_tensor = tf.constant([],shape=(0,4))
+        c_tensor = tf.constant([],shape=(0,4,4))
+        for individual in self.population:
+            a_tensor = tf.concat([a_tensor, tf.constant(individual.policy["a"])], axis=0)
+            b_tensor = tf.concat([b_tensor, tf.constant(individual.policy["b"])], axis=0)
+            c_tensor = tf.concat([c_tensor, tf.constant(individual.policy["c"])], axis=0)
+        start_state = tf.constant([1.0,0.0,0.02123817989101573,-0.009558798511813068])
+        costs = self.pilco_learn.evaluate_policies(start_state, a_tensor, b_tensor, c_tensor)
 
     def print_population(self):
         for individual in self.population:
@@ -548,12 +646,17 @@ for index in range(20):
     #print(a,b,c)
     #input_data_scaled,output_data = my_Pilco_learn.add_policy_data(policy,input_data_scaled,output_data)
 
+costs = my_genetic_algorithm.calculate_population_costs()
+print(costs)
+
 print("gen1")
 my_genetic_algorithm.print_population()
 for index in range(25):
     input_data,output_data = my_pilco_learn.load_data_2("model.txt")
     input_data_scaled = tf.convert_to_tensor(my_pilco_learn.scaler_x.fit_transform(np.array(input_data)), dtype=tf.float64)
     output_data_scaled = tf.convert_to_tensor(my_pilco_learn.scaler_y.fit_transform(np.array(output_data)), dtype=tf.float64)
+    my_pilco_learn.scaler_x_tf.fit(tf.constant(input_data))
+    my_pilco_learn.scaler_y_tf.fit(tf.constant(output_data))
     #my_pilco_learn.model.data = (input_data_scaled, output_data)
     #my_pilco_learn.input_data = input_data
     #my_pilco_learn.output_data = output_data
