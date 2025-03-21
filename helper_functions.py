@@ -1,5 +1,6 @@
 import time
 from math import sin, cos, trunc
+import math
 import numpy
 from numpy.linalg import inv
 from numpy import dot
@@ -7,6 +8,8 @@ import sys
 from PyQt5.QtGui import QCursor
 from PyQt5.QtWidgets import QApplication
 from copy import deepcopy
+import json
+import tensorflow as tf
 
 app = QApplication(sys.argv)
 
@@ -47,7 +50,7 @@ def T_vector(n, masses_v, angles_v, external_acceleration_v):
     return T
                           
 class Pendulum_Variables:
-    def __init__(self, n, masses_v, radii_v, angles_v, angle_dots_v):
+    def __init__(self, n, masses_v, radii_v, angles_v, angle_dots_v, policy_v, policy_file):
         # pendulum config
         self.n = n
         self.masses_vector_0 = masses_v
@@ -68,32 +71,162 @@ class Pendulum_Variables:
         # base motion
         self.x = 0
         self.v = 0
+        self.write_data = True
+        self.a_base = 0
+        #self.policy_type = policy_type
+        self.policy_vector = policy_v
+        self.policy_file = policy_file
+        print(policy_v)
+
         # pendulum acceleration due to base motion
         self.horizontal_acceleration = 0
         # running
         self.running = False
+
+        self.data_file = open('data.txt', 'w')
+        self.data_file.write(str(0)+","+str(self.x)+","+str(self.v)+","+str(cos(3.14159 - ((self.angles_vector[0][0] + math.pi/2)) % 6.28318))+","+str(sin(3.14159 - ((self.angles_vector[0][0] + math.pi/2)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
         # time
         self.time_0 = time.time()
+        self.initial_time = time.time()
+        self.sample_time = time.time()
+
+    def vector_square(self,vector):
+        output = []
+        for element in vector:
+            output.append([element*element1 for element1 in vector])
+        return output
     
+    def vector_cube(self,vector):
+        output = []
+        for element in vector:
+            output.append([[element*element1 for element1 in row] for row in self.vector_square(vector)])
+        return output
+    
+    def calculate_action(self, state, policy):
+        p = numpy.array(state)
+        p2 = numpy.array(self.vector_square(state))
+        p3 = numpy.array(self.vector_cube(state))
+        a = numpy.array(policy["a"])
+        b = numpy.array(policy["b"])
+        c = numpy.array(policy["c"])
+        action = max(min(numpy.sum(a*p) + numpy.sum(b*p2) + numpy.sum(c*p3),3),-3)
+        return action
+    
+    @tf.function
+    def vector_square_tf(self,vector):
+        return tf.tensordot(vector, vector, axes=0)
+    
+    @tf.function
+    def vector_cube_tf(self,vector):
+        return tf.tensordot(vector, self.vector_square_tf(vector), axes=0)
+    
+    @tf.function
+    def calculate_action_2_tf(self, state, policy_vars):
+        a,b,c = policy_vars
+        p = state
+        p2 = self.vector_square_tf(state)
+        p3 = self.vector_cube_tf(state)
+        action = tf.reduce_sum(tf.nn.leaky_relu(a[0]*p+a[1])*a[2])+tf.reduce_sum(tf.nn.leaky_relu(b[0]*p2+b[1])*b[2])+tf.reduce_sum(tf.nn.leaky_relu(c[0]*p3+c[1])*c[2])
+        return tf.clip_by_value(action,-3,3)
+    
+    def load_policy(self):
+        #policy_config = open(self.policy_file, "r")
+        #policy = []
+        #policy_type = ""
+        #for ln in policy_config:
+        #    ln.strip()
+        #    if ln[0] != "#":
+        #        ln = ln.strip("\n")
+        #        policy.append(float(ln.strip()))
+        #    else:
+        #        ln = ln.strip("\n")
+        #        policy_type = str(ln[1:])
+        #policy_config.close()
+        #self.policy_type = policy_type
+        #self.policy_vector = numpy.array(policy)
+        with open(self.policy_file, 'r') as file:
+            self.policy_vector = json.load(file)
+
     def calculate_KLT(self, angles_v, external_acceleration_v):
         K = K_matrix(self.n, self.masses_vector, self.radii_vector, angles_v)
         L = L_matrix(self.n, self.masses_vector, self.radii_vector, angles_v)
         Linv = inv(L)
         T = T_vector(self.n, self.masses_vector, angles_v, external_acceleration_v)
         return K, Linv, T
-        
+    
+    def open_file(self,file_name):
+        self.data_file = open(file_name, 'w')
+        self.data_file.close()
+
     def update(self):
         time_1 = time.time()
+        #time_1 = self.time_0 + 0.001
         t = time_1 - self.time_0
         
         # accelerate base to follow cursor
         mouse_x = float(QCursor.pos().x())
         self.mouse_x_convert = self.x_axis_left+(mouse_x-self.window_x)*self.x_axis_range/self.x_pixel_range
         #print(mouse_x, self.mouse_x_convert)
-        a_base = 2000*(self.mouse_x_convert - self.x) - 40*self.v
-        self.x += self.v*t+0.5*a_base*(t**2)
-        self.v += a_base*t
-        self.horizontal_acceleration = -a_base
+        #a_base = 500*(self.mouse_x_convert - self.x) - 40*self.v
+        #a_base = 3*(0.5 - self.x)
+        #self.a_base = 1*(80*(0.09*(self.x+0.8*self.v) + 3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318) - 30*self.angle_dots_vector[0][0])
+        #print(str(self.policy_type)+"pid")
+        #print(str(self.policy_type) == "pid")
+        #print(self.policy_vector)
+        #print("yo2")
+        #print(self.policy_vector[4])
+        #if str(self.policy_type) == "proportional":
+        if self.write_data:
+            #print("in")
+            #self.a_base = self.policy_vector[0]*(self.policy_vector[1]*(self.policy_vector[2]*(self.x+self.policy_vector[3]*self.v) + 3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318) - self.policy_vector[4]*self.angle_dots_vector[0][0])
+            #print(self.policy_vector[1])
+            #self.a_base = self.policy_vector[0]*(self.policy_vector[1]*(0.09*(self.x+0.8*self.v) + 3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318) - 30*self.angle_dots_vector[0][0])
+            #a = self.policy_vector[0]*self.policy_vector[1]*self.policy_vector[2]
+            #b = self.policy_vector[0]*self.policy_vector[1]*self.policy_vector[2]*self.policy_vector[3]
+            #c = self.policy_vector[0]*self.policy_vector[1]
+            #d = -self.policy_vector[0]*self.policy_vector[4]
+            #print("a")
+            #print(a)
+            #print("b")
+            #print(b)
+            #print("c")
+            #print(c)
+            #print("d")
+            #print(d)
+            #if time.time() - self.sample_time > 0.1:
+            if time_1 - self.sample_time > 0.01: 
+                #a = self.policy_vector[0]
+                #b = self.policy_vector[1]
+                #c = self.policy_vector[2]
+                #d = self.policy_vector[3]
+                #a = numpy.array(self.policy_vector["a"])
+                #p = numpy.array([self.x,self.v,(3.14159/2 - (self.angles_vector[0][0] % 6.28318)),self.angle_dots_vector[0][0]])
+                #print(type(self.x), type(self.v), type(self.angles_vector[0][0]), type(self.angle_dots_vector[0][0]))
+                state_vector = tf.constant([self.x.numpy() if isinstance(self.x, tf.Tensor) else self.x,
+                    self.v.numpy() if isinstance(self.v, tf.Tensor) else self.v,
+                    cos(3.14159 - ((self.angles_vector[0][0]+math.pi/2) % 6.28318)),
+                    sin(3.14159 - ((self.angles_vector[0][0]+math.pi/2) % 6.28318)),
+                    self.angle_dots_vector[0][0]])
+                #self.a_base = numpy.dot(a,p)
+                self.a_base = self.calculate_action_2_tf(state_vector, [tf.constant(self.policy_vector["a"]), tf.constant(self.policy_vector["b"]), tf.constant(self.policy_vector["c"])]).numpy()
+                #self.a_base = a*self.x+b*self.v+c*(3.14159/2 - (self.angles_vector[0][0] % 6.28318))+d*self.angle_dots_vector[0][0]
+                #self.data_file.write(str(time.time()-self.sample_time)+","+str(self.x)+","+str(self.v)+","+str((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
+                self.data_file = open("data.txt", 'a')
+                self.data_file.write(str(time_1-self.sample_time)+","+str(self.x)+","+str(self.v)+","+str(cos((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318)))+","+str(sin((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318)))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
+                self.data_file.close()
+                #self.sample_time = time.time()
+                self.sample_time = time_1
+        #print(a_base)
+        if abs(self.x) > 3:
+            self.a_base = 0
+            self.v = 0
+            self.horizontal_acceleration = -self.a_base
+            self.write_data = False
+        else:
+            self.x += self.v*t+0.5*self.a_base*(t**2)
+            self.v += self.a_base*t
+            self.horizontal_acceleration = -self.a_base
+            self.write_data = True
         
         # set external acceleration as if base were stationary
         self.external_acceleration_v = [self.horizontal_acceleration, -9.81]
@@ -114,7 +247,17 @@ class Pendulum_Variables:
         self.angle_dots_vector += 0.5*(angle_dotdots_vector1+angle_dotdots_vector2)*t
         
         self.time_0 = time_1
-        time.sleep(0.001)
+        #print(time_1 - self.initial_time)
+        #print("time_1")
+        #print(time_1)
+        #print("self.initial_time")
+        #print(self.initial_time)
+        if time_1 - self.initial_time > 5:
+            self.running = False
+            self.data_file.close()
+            print("run done")
+            simdone_file = open("sim_done.txt","w")
+            simdone_file.write("run_done"+str(time.time()))
+            simdone_file.close()
+        time.sleep(0.00001)
 
-        
-        

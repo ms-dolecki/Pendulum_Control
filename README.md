@@ -3,7 +3,7 @@ Control a virtual pendulum. Work in progress.
 # Usage
 Create virtual environment, install dependencies with pip, run command:
 
-```python3 pendulum_sim2.py --config_file pendulum_config2.txt```
+```python3 pendulum_sim2.py --config_file pendulum_config2.txt --policy_file policy_config.txt```
 
 Sample Run:
 

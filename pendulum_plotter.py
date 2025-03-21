@@ -4,6 +4,11 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore
 from PyQt5.QtWidgets import *
 from copy import deepcopy
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+from watchfiles import watch, Change
+import threading
+
 
 
 class Pendulum_Plotter:
@@ -27,6 +32,13 @@ class Pendulum_Plotter:
         self.grid.addWidget(self.plot_win, 0,0)
         self.reset_button = QPushButton("reset")
         self.reset_button.clicked.connect(self.reset)
+        path_to_watch = "test.txt"  # Replace with your file or directory path
+        watcher_thread = threading.Thread(target=self.file_watcher, args=[path_to_watch], daemon=True)
+        watcher_thread.start()
+        #event_handler = self.Watcher(self,path_to_watch)
+        #observer = Observer()
+        #observer.schedule(event_handler, path=path_to_watch, recursive=False)  # Set recursive=True to monitor subdirectories
+        #observer.start()
         self.grid.addWidget(self.reset_button,1,0)
         self.win.setLayout(self.grid)
         #self.plot.hideAxis("left")
@@ -38,17 +50,53 @@ class Pendulum_Plotter:
         #self.win.setRowHeight(1,100)
         timer = QtCore.QTimer()
         timer.timeout.connect(self.update_plot)
-        timer.start(0.0001)
+        timer.start(1)
         self.start = True
         pg.exec()
 
+    def file_watcher(self, path_to_watch):
+        deletion_stop_event = threading.Event()
+        while True:
+            for changes in watch(path_to_watch, stop_event=deletion_stop_event):
+                for change_type, path in changes:
+                    print(f"{Change(change_type).name} {path}")
+                    if change_type == Change.deleted:
+                        deletion_stop_event.set()
+                        time.sleep(2)
+                    print(f"{Change(change_type).name} {path}")
+                    self.reset()
+            print("exited for loop")
+            deletion_stop_event.clear()
+    #class Watcher(FileSystemEventHandler):
+    #    def __init__(self,pendulum_plotter,path_to_watch):
+    #        self.pendulum_plotter = pendulum_plotter
+    #        for changes in watch(path_to_watch):
+    #            print(changes)
+    #            self.pendulum_plotter.reset()
+    #
+    #    def on_any_event(self, event):
+    #        print(f"Any event detected: {event.event_type} in {event.src_path}")
+    #    def on_modified(self, event):
+    #        print("modified")
+    #        print(event)
+    #        if event.is_directory:
+    #            return
+    #        self.pendulum_plotter.reset()
+
     def reset(self):
-        print("reset")
         self.pendulum_variables.running = False
+        self.pendulum_variables.x = 1
         self.pendulum_variables.angles_vector = deepcopy(self.pendulum_variables.angles_vector_0)
         self.pendulum_variables.angle_dots_vector = deepcopy(self.pendulum_variables.angle_dots_vector_0)
         self.pendulum_variables.time_0 = time.time()
-        self.pendulum_variables.old_time = time.time()
+        self.pendulum_variables.initial_time = time.time()
+        self.pendulum_variables.sample_time = time.time()
+        self.pendulum_variables.open_file('data.txt')
+        self.pendulum_variables.load_policy()
+        print("reset")
+        #print("self.pendulum_variables.initial_time")
+        #print(self.pendulum_variables.initial_time)
+        #self.pendulum_variables.old_time = time.time()
         self.pendulum_variables.running = True
     
     def update_plot(self):
@@ -69,4 +117,5 @@ class Pendulum_Plotter:
             self.pendulum_variables.time_0 = time.time()
             self.pendulum_variables.running = True
             self.start = False
+
 
