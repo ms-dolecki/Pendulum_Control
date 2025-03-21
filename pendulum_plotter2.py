@@ -8,24 +8,45 @@ from copy import deepcopy
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from PyQt5.QtCore import QThread, pyqtSignal
+import argparse
+import math
+
+parser = argparse.ArgumentParser(
+                    prog='Pendulum_Sim',
+                    description='Simulate an n-pendulum')                  
+parser.add_argument('--trajectory_file', type=str)
+args = parser.parse_args()
+trajectory_file = args.trajectory_file
 
 # Worker thread class
 class Worker(QThread):
     # Define the signal with an argument (a string in this case)
     update_signal = pyqtSignal(float,float)
 
+    def __init__(self, trajectory_file):
+        super().__init__()
+        self.trajectory_file = trajectory_file
+        
+
     def run(self):
-        data_file = "Pilco_trajectory.txt"
-        data = open(data_file, "r")
+        #data_file = "Pilco_trajectory.txt"
+        #data = open(data_file, "r")
+        data = open(self.trajectory_file, "r")
         input_data = []
         output_data = []
+        time.sleep(3)
         for ln in data:
             ln.strip()
             ln = ln.strip("\n").split(",")
-            delta_T = float(ln[0].strip())
-            x = float(ln[1].strip())
-            #v = float(ln[2].strip())
-            angle = float(ln[3].strip())
+            #delta_T = float(ln[0].strip())
+            delta_T = 0.01
+            x = float(ln[0].strip())
+            #print(x)
+            #v = float(ln[1].strip())
+            #angle = float(ln[2].strip())
+            angle_cos = float(ln[2].strip())
+            angle_sin = float(ln[3].strip())
+            angle = math.atan2(angle_sin, angle_cos)
             #angle_dot = float(ln[4].strip())
             #a_base = float(ln[5].strip())
             #input_data.append([delta_T,x,v,angle,angle_dot,a_base])
@@ -35,7 +56,7 @@ class Worker(QThread):
         data.close()
 
 class Pendulum_Plotter:
-    def __init__(self, x_pixel_range, y_pixel_range, padding_factor):
+    def __init__(self, x_pixel_range, y_pixel_range, padding_factor, trajectory_file):
         #self.pendulum_variables = pendulum_vars
 
         self.pendulum_length = 2
@@ -73,7 +94,7 @@ class Pendulum_Plotter:
         #timer.start(100)
         self.start = True
          # Create an instance of the worker thread
-        self.worker = Worker()
+        self.worker = Worker(trajectory_file)
         # Connect the signal to the slot with an argument
         self.worker.update_signal.connect(self.update_plot)
         self.worker.start()  # Start the worker thread
@@ -124,4 +145,4 @@ class Pendulum_Plotter:
             self.start = False
 
 app = QApplication(sys.argv)
-pendulum_plot = Pendulum_Plotter(1200, 600, 1.2)
+pendulum_plot = Pendulum_Plotter(1200, 600, 1.2, trajectory_file)

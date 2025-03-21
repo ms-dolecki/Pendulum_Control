@@ -7,6 +7,6 @@ sudo apt-get install -y '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrend
 sudo apt-get install -y qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools
 pip3 install --upgrade setuptools wheel
 pip3 install pyqt5 --config-settings --confirm-license= --verbose
-pip3 install numpy pyqtgraph watchdog serial gpflow scikit-learn watchfiles
+pip3 install numpy pyqtgraph watchdog serial gpflow scikit-learn watchfiles deap
 sudo apt-get install unison
 touch ~/.Xauthority

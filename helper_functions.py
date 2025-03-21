@@ -9,6 +9,7 @@ from PyQt5.QtGui import QCursor
 from PyQt5.QtWidgets import QApplication
 from copy import deepcopy
 import json
+import tensorflow as tf
 
 app = QApplication(sys.argv)
 
@@ -83,7 +84,7 @@ class Pendulum_Variables:
         self.running = False
 
         self.data_file = open('data.txt', 'w')
-        self.data_file.write(str(0)+","+str(self.x)+","+str(self.v)+","+str((3.14159 - ((self.angles_vector[0][0] + math.pi/2)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
+        self.data_file.write(str(0)+","+str(self.x)+","+str(self.v)+","+str(cos(3.14159 - ((self.angles_vector[0][0] + math.pi/2)) % 6.28318))+","+str(sin(3.14159 - ((self.angles_vector[0][0] + math.pi/2)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
         # time
         self.time_0 = time.time()
         self.initial_time = time.time()
@@ -110,6 +111,23 @@ class Pendulum_Variables:
         c = numpy.array(policy["c"])
         action = max(min(numpy.sum(a*p) + numpy.sum(b*p2) + numpy.sum(c*p3),3),-3)
         return action
+    
+    @tf.function
+    def vector_square_tf(self,vector):
+        return tf.tensordot(vector, vector, axes=0)
+    
+    @tf.function
+    def vector_cube_tf(self,vector):
+        return tf.tensordot(vector, self.vector_square_tf(vector), axes=0)
+    
+    @tf.function
+    def calculate_action_2_tf(self, state, policy_vars):
+        a,b,c = policy_vars
+        p = state
+        p2 = self.vector_square_tf(state)
+        p3 = self.vector_cube_tf(state)
+        action = tf.reduce_sum(tf.nn.leaky_relu(a[0]*p+a[1])*a[2])+tf.reduce_sum(tf.nn.leaky_relu(b[0]*p2+b[1])*b[2])+tf.reduce_sum(tf.nn.leaky_relu(c[0]*p3+c[1])*c[2])
+        return tf.clip_by_value(action,-3,3)
     
     def load_policy(self):
         #policy_config = open(self.policy_file, "r")
@@ -183,13 +201,18 @@ class Pendulum_Variables:
                 #d = self.policy_vector[3]
                 #a = numpy.array(self.policy_vector["a"])
                 #p = numpy.array([self.x,self.v,(3.14159/2 - (self.angles_vector[0][0] % 6.28318)),self.angle_dots_vector[0][0]])
-                state_vector = [self.x,self.v,(3.14159 - ((self.angles_vector[0][0]+math.pi/2) % 6.28318)),self.angle_dots_vector[0][0]]
+                #print(type(self.x), type(self.v), type(self.angles_vector[0][0]), type(self.angle_dots_vector[0][0]))
+                state_vector = tf.constant([self.x.numpy() if isinstance(self.x, tf.Tensor) else self.x,
+                    self.v.numpy() if isinstance(self.v, tf.Tensor) else self.v,
+                    cos(3.14159 - ((self.angles_vector[0][0]+math.pi/2) % 6.28318)),
+                    sin(3.14159 - ((self.angles_vector[0][0]+math.pi/2) % 6.28318)),
+                    self.angle_dots_vector[0][0]])
                 #self.a_base = numpy.dot(a,p)
-                self.a_base = self.calculate_action(state_vector, self.policy_vector)
+                self.a_base = self.calculate_action_2_tf(state_vector, [tf.constant(self.policy_vector["a"]), tf.constant(self.policy_vector["b"]), tf.constant(self.policy_vector["c"])]).numpy()
                 #self.a_base = a*self.x+b*self.v+c*(3.14159/2 - (self.angles_vector[0][0] % 6.28318))+d*self.angle_dots_vector[0][0]
                 #self.data_file.write(str(time.time()-self.sample_time)+","+str(self.x)+","+str(self.v)+","+str((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
                 self.data_file = open("data.txt", 'a')
-                self.data_file.write(str(time_1-self.sample_time)+","+str(self.x)+","+str(self.v)+","+str((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
+                self.data_file.write(str(time_1-self.sample_time)+","+str(self.x)+","+str(self.v)+","+str(cos((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318)))+","+str(sin((3.14159/2 - (6.28318+(self.angles_vector[0][0] % 6.28318)) % 6.28318)))+","+str(self.angle_dots_vector[0][0])+","+str(self.a_base)+"\n")
                 self.data_file.close()
                 #self.sample_time = time.time()
                 self.sample_time = time_1
@@ -197,6 +220,7 @@ class Pendulum_Variables:
         if abs(self.x) > 3:
             self.a_base = 0
             self.v = 0
+            self.horizontal_acceleration = -self.a_base
             self.write_data = False
         else:
             self.x += self.v*t+0.5*self.a_base*(t**2)
